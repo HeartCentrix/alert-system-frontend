@@ -4,29 +4,29 @@
 
 @layer base {
   * { box-sizing: border-box; }
-  
   html { font-size: 15px; }
-  
   body {
     @apply bg-surface-950 text-slate-100 font-sans antialiased;
     font-feature-settings: 'cv11', 'ss01';
   }
-
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { @apply bg-surface-700 rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-slate-500; }
-
   ::selection { @apply bg-primary-600 text-white; }
 }
 
 @layer components {
   .card {
-    @apply bg-surface-900 border border-surface-700/60 rounded-xl shadow-card;
+    @apply bg-surface-900 rounded-xl;
+    border: 1px solid rgb(51 65 85 / 0.6);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
   }
-  
+
   .card-hover {
-    @apply bg-surface-900 border border-surface-700/60 rounded-xl shadow-card transition-all duration-200;
+    @apply bg-surface-900 rounded-xl transition-all duration-200;
+    border: 1px solid rgb(51 65 85 / 0.6);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   }
   .card-hover:hover {
     border-color: rgb(71 85 105 / 0.6);
@@ -36,42 +36,69 @@
   .badge {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
   }
-
-  .badge-red    { @apply badge bg-danger-600/20 text-danger-400 border border-danger-600/30; }
-  .badge-orange { @apply badge bg-warning-600/20 text-warning-400 border border-warning-600/30; }
-  .badge-yellow { @apply badge bg-yellow-600/20 text-yellow-400 border border-yellow-600/30; }
-  .badge-green  { @apply badge bg-success-600/20 text-success-400 border border-success-600/30; }
-  .badge-blue   { @apply badge bg-primary-600/20 text-primary-400 border border-primary-600/30; }
-  .badge-gray   { @apply badge bg-surface-700/40 text-slate-400 border border-surface-600/40; }
+  .badge-red {
+    @apply badge text-danger-400;
+    background: rgb(220 38 38 / 0.2);
+    border: 1px solid rgb(220 38 38 / 0.3);
+  }
+  .badge-orange {
+    @apply badge text-warning-400;
+    background: rgb(217 119 6 / 0.2);
+    border: 1px solid rgb(217 119 6 / 0.3);
+  }
+  .badge-yellow {
+    @apply badge text-yellow-400;
+    background: rgb(202 138 4 / 0.2);
+    border: 1px solid rgb(202 138 4 / 0.3);
+  }
+  .badge-green {
+    @apply badge text-success-400;
+    background: rgb(22 163 74 / 0.2);
+    border: 1px solid rgb(22 163 74 / 0.3);
+  }
+  .badge-blue {
+    @apply badge text-primary-400;
+    background: rgb(29 78 216 / 0.2);
+    border: 1px solid rgb(29 78 216 / 0.3);
+  }
+  .badge-gray {
+    @apply badge text-slate-400;
+    background: rgb(51 65 85 / 0.4);
+    border: 1px solid rgb(51 65 85 / 0.4);
+  }
 
   .btn {
     @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed select-none;
   }
-  
   .btn-primary {
     @apply btn bg-primary-600 text-white shadow-sm;
   }
-  .btn-primary:hover { @apply bg-primary-500 shadow-glow-blue; }
+  .btn-primary:hover { @apply bg-primary-500; }
   .btn-primary:active { transform: scale(0.98); }
-  
+
   .btn-danger {
     @apply btn bg-danger-600 text-white shadow-sm;
   }
-  .btn-danger:hover { @apply bg-danger-500 shadow-glow-red; }
+  .btn-danger:hover { @apply bg-danger-500; }
   .btn-danger:active { transform: scale(0.98); }
-  
+
   .btn-ghost {
-    @apply btn bg-transparent text-slate-300 border border-transparent;
+    @apply btn bg-transparent text-slate-300;
+    border: 1px solid transparent;
   }
   .btn-ghost:hover { @apply bg-surface-800 text-white border-surface-600; }
-  
+
   .btn-outline {
-    @apply btn bg-transparent border border-surface-600 text-slate-300;
+    @apply btn bg-transparent text-slate-300 border-surface-600;
+    border-width: 1px;
+    border-style: solid;
   }
-  .btn-outline:hover { @apply border-slate-400 text-white; }
+  .btn-outline:hover { @apply text-white border-slate-400; }
 
   .input {
-    @apply w-full bg-surface-800 border border-surface-600 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm transition-colors;
+    @apply w-full bg-surface-800 border-surface-600 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm transition-colors;
+    border-width: 1px;
+    border-style: solid;
   }
   .input:focus {
     @apply outline-none border-primary-500;
@@ -94,13 +121,15 @@
     @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 transition-all duration-150 cursor-pointer select-none;
   }
   .nav-item:hover { @apply text-slate-100 bg-surface-800; }
-  
   .nav-item.active {
-    @apply text-white bg-primary-600/20 border border-primary-600/30;
+    @apply text-white;
+    background: rgb(29 78 216 / 0.2);
+    border: 1px solid rgb(29 78 216 / 0.3);
   }
 
   .table-row {
-    @apply border-b border-surface-700/40 transition-colors;
+    @apply border-b transition-colors;
+    border-color: rgb(51 65 85 / 0.4);
   }
   .table-row:hover { @apply bg-surface-800/50; }
 
@@ -108,16 +137,25 @@
   .severity-medium { @apply badge-orange; }
   .severity-low    { @apply badge-yellow; }
   .severity-info   { @apply badge-blue; }
+
+  .step-active { @apply bg-primary-600 text-white rounded-full; }
+  .step-done {
+    @apply text-success-400 rounded-full;
+    background: rgb(22 163 74 / 0.3);
+    border: 1px solid rgb(34 197 94 / 0.4);
+  }
+  .step-todo {
+    @apply bg-surface-800 text-slate-500 rounded-full;
+    border: 1px solid rgb(51 65 85 / 1);
+  }
 }
 
-/* Sidebar pulse for active incident */
 @keyframes urgentPulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
   50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
 }
 .urgent-pulse { animation: urgentPulse 2s ease-in-out infinite; }
 
-/* Loading shimmer */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -127,8 +165,3 @@
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
-
-/* Step indicator */
-.step-active { @apply bg-primary-600 text-white; }
-.step-done   { @apply bg-success-600/30 text-success-400 border border-success-500/40; }
-.step-todo   { @apply bg-surface-800 text-slate-500 border border-surface-600; }
