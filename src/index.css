@@ -6,148 +6,145 @@
   * { box-sizing: border-box; }
   html { font-size: 15px; }
   body {
-    @apply bg-surface-950 text-slate-100 font-sans antialiased;
+    background-color: #020617;
+    color: #f1f5f9;
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
     font-feature-settings: 'cv11', 'ss01';
   }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-surface-700 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-500; }
-  ::selection { @apply bg-primary-600 text-white; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+  ::selection { background: #1d4ed8; color: white; }
 }
 
 @layer components {
   .card {
-    @apply bg-surface-900 rounded-xl;
-    border: 1px solid rgb(51 65 85 / 0.6);
+    background-color: #0f172a;
+    border: 1px solid rgba(51, 65, 85, 0.6);
+    border-radius: 0.75rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
   }
 
   .card-hover {
-    @apply bg-surface-900 rounded-xl transition-all duration-200;
-    border: 1px solid rgb(51 65 85 / 0.6);
+    background-color: #0f172a;
+    border: 1px solid rgba(51, 65, 85, 0.6);
+    border-radius: 0.75rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    transition: all 0.2s;
   }
   .card-hover:hover {
-    border-color: rgb(71 85 105 / 0.6);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-color: rgba(71, 85, 105, 0.8);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
 
   .badge {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
   }
-  .badge-red {
-    @apply badge text-danger-400;
-    background: rgb(220 38 38 / 0.2);
-    border: 1px solid rgb(220 38 38 / 0.3);
-  }
-  .badge-orange {
-    @apply badge text-warning-400;
-    background: rgb(217 119 6 / 0.2);
-    border: 1px solid rgb(217 119 6 / 0.3);
-  }
-  .badge-yellow {
-    @apply badge text-yellow-400;
-    background: rgb(202 138 4 / 0.2);
-    border: 1px solid rgb(202 138 4 / 0.3);
-  }
-  .badge-green {
-    @apply badge text-success-400;
-    background: rgb(22 163 74 / 0.2);
-    border: 1px solid rgb(22 163 74 / 0.3);
-  }
-  .badge-blue {
-    @apply badge text-primary-400;
-    background: rgb(29 78 216 / 0.2);
-    border: 1px solid rgb(29 78 216 / 0.3);
-  }
-  .badge-gray {
-    @apply badge text-slate-400;
-    background: rgb(51 65 85 / 0.4);
-    border: 1px solid rgb(51 65 85 / 0.4);
-  }
+  .badge-red    { @apply badge; background: rgba(220,38,38,0.2); color: #f87171; border: 1px solid rgba(220,38,38,0.3); }
+  .badge-orange { @apply badge; background: rgba(217,119,6,0.2); color: #fb923c; border: 1px solid rgba(217,119,6,0.3); }
+  .badge-yellow { @apply badge; background: rgba(202,138,4,0.2); color: #facc15; border: 1px solid rgba(202,138,4,0.3); }
+  .badge-green  { @apply badge; background: rgba(22,163,74,0.2); color: #4ade80; border: 1px solid rgba(22,163,74,0.3); }
+  .badge-blue   { @apply badge; background: rgba(29,78,216,0.2); color: #60a5fa; border: 1px solid rgba(29,78,216,0.3); }
+  .badge-gray   { @apply badge; background: rgba(51,65,85,0.4); color: #94a3b8; border: 1px solid rgba(51,65,85,0.4); }
 
   .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed select-none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.15s;
+    cursor: pointer;
+    user-select: none;
+    border: none;
   }
-  .btn-primary {
-    @apply btn bg-primary-600 text-white shadow-sm;
-  }
-  .btn-primary:hover { @apply bg-primary-500; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-primary { @apply btn; background: #1d4ed8; color: white; }
+  .btn-primary:hover { background: #2563eb; }
   .btn-primary:active { transform: scale(0.98); }
 
-  .btn-danger {
-    @apply btn bg-danger-600 text-white shadow-sm;
-  }
-  .btn-danger:hover { @apply bg-danger-500; }
+  .btn-danger { @apply btn; background: #dc2626; color: white; }
+  .btn-danger:hover { background: #ef4444; }
   .btn-danger:active { transform: scale(0.98); }
 
-  .btn-ghost {
-    @apply btn bg-transparent text-slate-300;
-    border: 1px solid transparent;
-  }
-  .btn-ghost:hover { @apply bg-surface-800 text-white border-surface-600; }
+  .btn-ghost { @apply btn; background: transparent; color: #cbd5e1; border: 1px solid transparent; }
+  .btn-ghost:hover { background: #1e293b; color: white; border-color: #475569; }
 
-  .btn-outline {
-    @apply btn bg-transparent text-slate-300 border-surface-600;
-    border-width: 1px;
-    border-style: solid;
-  }
-  .btn-outline:hover { @apply text-white border-slate-400; }
+  .btn-outline { @apply btn; background: transparent; color: #cbd5e1; border: 1px solid #475569; }
+  .btn-outline:hover { color: white; border-color: #94a3b8; }
 
   .input {
-    @apply w-full bg-surface-800 border-surface-600 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm transition-colors;
-    border-width: 1px;
-    border-style: solid;
+    width: 100%;
+    background: #1e293b;
+    border: 1px solid #475569;
+    color: #f1f5f9;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
   }
+  .input::placeholder { color: #64748b; }
   .input:focus {
-    @apply outline-none border-primary-500;
-    box-shadow: 0 0 0 1px rgb(59 130 246 / 0.3);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px rgba(59,130,246,0.3);
   }
 
   .label {
-    @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider;
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #94a3b8;
+    margin-bottom: 0.375rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
-  .select {
-    @apply input appearance-none cursor-pointer;
-  }
+  .select { @apply input; appearance: none; cursor: pointer; }
 
-  .stat-card {
-    @apply card p-5 flex flex-col gap-2;
-  }
+  .stat-card { @apply card; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
 
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 transition-all duration-150 cursor-pointer select-none;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    color: #94a3b8;
+    transition: all 0.15s;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid transparent;
   }
-  .nav-item:hover { @apply text-slate-100 bg-surface-800; }
-  .nav-item.active {
-    @apply text-white;
-    background: rgb(29 78 216 / 0.2);
-    border: 1px solid rgb(29 78 216 / 0.3);
-  }
+  .nav-item:hover { color: #f1f5f9; background: #1e293b; }
+  .nav-item.active { color: white; background: rgba(29,78,216,0.2); border-color: rgba(29,78,216,0.3); }
 
   .table-row {
-    @apply border-b transition-colors;
-    border-color: rgb(51 65 85 / 0.4);
+    border-bottom: 1px solid rgba(51,65,85,0.4);
+    transition: background-color 0.15s;
   }
-  .table-row:hover { @apply bg-surface-800/50; }
+  .table-row:hover { background: rgba(30,41,59,0.5); }
 
   .severity-high   { @apply badge-red; }
   .severity-medium { @apply badge-orange; }
   .severity-low    { @apply badge-yellow; }
   .severity-info   { @apply badge-blue; }
 
-  .step-active { @apply bg-primary-600 text-white rounded-full; }
-  .step-done {
-    @apply text-success-400 rounded-full;
-    background: rgb(22 163 74 / 0.3);
-    border: 1px solid rgb(34 197 94 / 0.4);
-  }
-  .step-todo {
-    @apply bg-surface-800 text-slate-500 rounded-full;
-    border: 1px solid rgb(51 65 85 / 1);
-  }
+  .step-active { background: #1d4ed8; color: white; border-radius: 9999px; }
+  .step-done   { background: rgba(22,163,74,0.3); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); border-radius: 9999px; }
+  .step-todo   { background: #1e293b; color: #64748b; border: 1px solid #475569; border-radius: 9999px; }
 }
 
 @keyframes urgentPulse {
