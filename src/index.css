@@ -26,7 +26,11 @@
   }
   
   .card-hover {
-    @apply card hover:border-surface-600 hover:shadow-card-hover transition-all duration-200;
+    @apply bg-surface-900 border border-surface-700/60 rounded-xl shadow-card transition-all duration-200;
+  }
+  .card-hover:hover {
+    border-color: rgb(71 85 105 / 0.6);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
 
   .badge {
@@ -45,24 +49,33 @@
   }
   
   .btn-primary {
-    @apply btn bg-primary-600 hover:bg-primary-500 text-white shadow-sm hover:shadow-glow-blue active:scale-[0.98];
+    @apply btn bg-primary-600 text-white shadow-sm;
   }
+  .btn-primary:hover { @apply bg-primary-500 shadow-glow-blue; }
+  .btn-primary:active { transform: scale(0.98); }
   
   .btn-danger {
-    @apply btn bg-danger-600 hover:bg-danger-500 text-white shadow-sm hover:shadow-glow-red active:scale-[0.98];
+    @apply btn bg-danger-600 text-white shadow-sm;
   }
+  .btn-danger:hover { @apply bg-danger-500 shadow-glow-red; }
+  .btn-danger:active { transform: scale(0.98); }
   
   .btn-ghost {
-    @apply btn bg-transparent hover:bg-surface-800 text-slate-300 hover:text-white border border-transparent hover:border-surface-600;
+    @apply btn bg-transparent text-slate-300 border border-transparent;
   }
+  .btn-ghost:hover { @apply bg-surface-800 text-white border-surface-600; }
   
   .btn-outline {
-    @apply btn bg-transparent border border-surface-600 text-slate-300 hover:border-slate-400 hover:text-white;
+    @apply btn bg-transparent border border-surface-600 text-slate-300;
   }
+  .btn-outline:hover { @apply border-slate-400 text-white; }
 
   .input {
-    @apply w-full bg-surface-800 border border-surface-600 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm
-    focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30 transition-colors;
+    @apply w-full bg-surface-800 border border-surface-600 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm transition-colors;
+  }
+  .input:focus {
+    @apply outline-none border-primary-500;
+    box-shadow: 0 0 0 1px rgb(59 130 246 / 0.3);
   }
 
   .label {
@@ -78,17 +91,18 @@
   }
 
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-100 hover:bg-surface-800 
-    transition-all duration-150 cursor-pointer select-none;
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 transition-all duration-150 cursor-pointer select-none;
   }
+  .nav-item:hover { @apply text-slate-100 bg-surface-800; }
   
   .nav-item.active {
     @apply text-white bg-primary-600/20 border border-primary-600/30;
   }
 
   .table-row {
-    @apply border-b border-surface-700/40 hover:bg-surface-800/50 transition-colors;
+    @apply border-b border-surface-700/40 transition-colors;
   }
+  .table-row:hover { @apply bg-surface-800/50; }
 
   .severity-high   { @apply badge-red; }
   .severity-medium { @apply badge-orange; }
