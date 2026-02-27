@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
 
 import AppLayout from '@/components/layout/AppLayout'
@@ -33,7 +33,7 @@ export default function App() {
   }, [])
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -52,6 +52,6 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
