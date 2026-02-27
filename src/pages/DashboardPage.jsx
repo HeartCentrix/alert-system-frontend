@@ -9,6 +9,7 @@ import {
   ArrowRight, CheckCircle2, Clock, XCircle, Shield
 } from 'lucide-react'
 import { dashboardAPI } from '@/services/api'
+import LocationMap from '@/components/LocationMap'
 import { timeAgo, severityColor, statusColor, formatDate } from '@/utils/helpers'
 import { cn } from '@/utils/helpers'
 
@@ -139,48 +140,14 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Location list with dots */}
-            <div className="space-y-2">
-              {mapData?.locations?.length === 0 && (
-                <div className="text-center py-8 text-slate-500 text-sm">No locations configured</div>
-              )}
-              {mapData?.locations?.map(loc => (
-                <div key={loc.id} className="flex items-center gap-3 p-3 rounded-lg bg-surface-800/50 hover:bg-surface-800 transition-colors">
-                  <div className="w-8 h-8 rounded-full bg-primary-600/20 flex items-center justify-center">
-                    <MapPin size={14} className="text-primary-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-slate-200 truncate">{loc.name}</div>
-                    <div className="text-xs text-slate-500">{loc.city}, {loc.state}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-white">{loc.user_count}</div>
-                    <div className="text-xs text-slate-500">people</div>
-                  </div>
-                  {loc.latitude && loc.longitude && (
-                    <a
-                      href={`https://maps.google.com/?q=${loc.latitude},${loc.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary-400 hover:underline ml-2"
-                    >
-                      Map
-                    </a>
-                  )}
-                </div>
-              ))}
-              {mapData?.unassigned_users > 0 && (
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-800/30">
-                  <div className="w-8 h-8 rounded-full bg-surface-700 flex items-center justify-center">
-                    <Users size={14} className="text-slate-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm text-slate-400">Unassigned</div>
-                  </div>
-                  <div className="text-sm font-bold text-slate-400">{mapData.unassigned_users}</div>
-                </div>
-              )}
-            </div>
+            {/* Leaflet Map */}
+            {mapData?.locations?.length === 0 ? (
+              <div className="flex items-center justify-center h-64 text-slate-500 text-sm rounded-lg bg-surface-800/30">
+                No locations configured yet
+              </div>
+            ) : (
+              <LocationMap locations={mapData?.locations || []} height={280} />
+            )}
 
             {/* Summary row */}
             <div className="mt-4 pt-4 border-t border-surface-700/40 flex gap-6">
