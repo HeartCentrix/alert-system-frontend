@@ -492,9 +492,17 @@ export default function NewNotificationPage() {
     }
   })
 
+  // Subscribe to all fields that gate the Next button so React re-renders on every change
+  const watched = form.watch([
+    'incident_type', 'incident_id', 'title', 'message',
+    'target_all', 'target_group_ids', 'target_user_ids',
+    'channels',
+  ])
+
   const canProceed = () => {
     const v = form.getValues()
-    if (step === 0) return !!v.title
+    // Step 0: title is required + at least one of (incident type selected OR existing incident linked)
+    if (step === 0) return (!!v.incident_type || !!v.incident_id) && !!v.title
     if (step === 1) return !!v.message
     if (step === 2) return v.target_all || (v.target_group_ids?.length > 0) || (v.target_user_ids?.length > 0)
     if (step === 3) return v.channels?.length > 0
