@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # Dependencies
 node_modules/
 .pnp
@@ -42,3 +43,7 @@ coverage/
 .cache/
 .temp/
 .package-lock.json
+=======
+node_modules
+package-lock.json
+>>>>>>> Stashed changes
