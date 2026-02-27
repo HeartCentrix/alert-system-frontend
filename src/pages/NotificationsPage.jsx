@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Bell, Send, XCircle, ChevronRight, Users, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
@@ -10,9 +9,11 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 export function NotificationsListPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  // Initialise the filter from the URL query param so that navigating to
-  // /notifications?status=scheduled pre-selects the Scheduled tab
-  const [status, setStatus] = useState(searchParams.get('status') || '')
+  // Derive the active filter directly from the URL — this is the single source
+  // of truth. Using useState would only capture the initial value on mount and
+  // would NOT update when the sidebar navigates to a different query string
+  // (same route = no remount = useState initializer never re-runs).
+  const status = searchParams.get('status') || ''
 
   const { data, isLoading } = useQuery({
     queryKey: ['notifications', status],
@@ -39,11 +40,7 @@ export function NotificationsListPage() {
         {statuses.map(s => (
           <button
             key={s}
-            onClick={() => {
-              setStatus(s)
-              // Keep the URL in sync so the sidebar active state reflects the current tab
-              s ? setSearchParams({ status: s }) : setSearchParams({})
-            }}
+            onClick={() => s ? setSearchParams({ status: s }) : setSearchParams({})}
             className={cn(
               'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
               status === s ? 'bg-surface-700 text-white' : 'text-slate-500 hover:text-slate-300'
