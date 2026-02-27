@@ -99,16 +99,18 @@ export default function AppLayout() {
               ) : <div key={i} className="my-2 border-t border-surface-700/40" />
             }
             const Icon = item.icon
-            // Items with customActive bypass NavLink's path-only matching
-            // (NavLink ignores query strings, causing both Notifications and
-            // Scheduled to highlight simultaneously on /notifications)
+            // Items with customActive bypass NavLink's path-only matching.
+            // IMPORTANT: className must be a FUNCTION, not a string — when NavLink
+            // receives a string it auto-appends "active" based on pathname-only
+            // matching (ignoring query strings), which causes both Notifications
+            // and Scheduled to highlight simultaneously.
             if (item.customActive) {
               const active = item.customActive(location.pathname, location.search)
               return (
                 <NavLink
                   key={i}
                   to={item.to}
-                  className={cn('nav-item', active && 'active')}
+                  className={() => cn('nav-item', active && 'active')}
                 >
                   <Icon size={16} className="shrink-0" />
                   {sidebarOpen && <span>{item.label}</span>}
