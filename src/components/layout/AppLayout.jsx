@@ -3,11 +3,12 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Bell, Calendar, Inbox, AlertTriangle,
   Users, Group, MapPin, FileText, Settings, LogOut,
-  Menu, X, ChevronDown, Zap, MessageSquare
+  ChevronLeft, ChevronRight, Zap
 } from 'lucide-react'
 import useAuthStore from '@/store/authStore'
 import { cn, getInitials } from '@/utils/helpers'
 import toast from 'react-hot-toast'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
@@ -56,25 +57,76 @@ export default function AppLayout() {
         sidebarOpen ? 'w-60' : 'w-16'
       )}>
         {/* Logo */}
-        <div className="flex items-center justify-between px-3 h-14 border-b border-surface-700/60">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
-              <Zap size={16} className="text-white" fill="white" />
-            </div>
-            {sidebarOpen && (
+        {sidebarOpen ? (
+          /* Expanded state: horizontal layout */
+          <div className="flex items-center justify-between px-4 h-14 border-b border-surface-700/60 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
+                <Zap size={16} className="text-white" fill="white" />
+              </div>
               <span className="font-display font-700 text-white text-lg tracking-tight whitespace-nowrap">
                 TM Alert
               </span>
-            )}
+            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    className={cn(
+                      'flex items-center justify-center shrink-0',
+                      'w-11 h-11 min-w-[44px] min-h-[44px]',
+                      'rounded-lg',
+                      'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
+                      'active:bg-surface-700 active:text-white',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
+                      'transition-all duration-200 ease-in-out'
+                    )}
+                    aria-label="Collapse sidebar"
+                  >
+                    <ChevronLeft size={20} strokeWidth={2} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+                  Collapse sidebar
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
-            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
-            {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
-          </button>
-        </div>
+        ) : (
+          /* Collapsed state: vertical stacked layout */
+          <div className="flex flex-col items-center py-3 border-b border-surface-700/60 shrink-0">
+            {/* Logo */}
+            <div className="w-11 h-11 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red mb-2">
+              <Zap size={20} className="text-white" fill="white" />
+            </div>
+            {/* Toggle button */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    className={cn(
+                      'flex items-center justify-center shrink-0',
+                      'w-11 h-11 min-w-[44px] min-h-[44px]',
+                      'rounded-lg',
+                      'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
+                      'active:bg-surface-700 active:text-white',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
+                      'transition-all duration-200 ease-in-out'
+                    )}
+                    aria-label="Expand sidebar"
+                  >
+                    <ChevronRight size={20} strokeWidth={2} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+                  Expand sidebar
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
 
         {/* New Notification CTA */}
         <div className="p-3">
