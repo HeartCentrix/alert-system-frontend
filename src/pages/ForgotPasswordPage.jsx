@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Zap, AlertCircle, Mail, ArrowLeft } from 'lucide-react'
-import axios from 'axios'
+import { authAPI } from '@/services/api'
 import toast from 'react-hot-toast'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
@@ -15,7 +13,7 @@ export default function ForgotPasswordPage() {
   const onSubmit = async ({ email }) => {
     setLoading(true)
     try {
-      await axios.post(`${API_URL}/api/v1/auth/forgot-password`, { email })
+      await authAPI.forgotPassword(email)
       setSubmitted(true)
       toast.success('Password reset email sent!')
     } catch (err) {
