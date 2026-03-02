@@ -7,6 +7,27 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// Mutex for token refresh - prevents concurrent refresh requests
+let isRefreshing = false
+let refreshSubscribers = []
+
+// Subscribe to refresh event (queue callbacks)
+function subscribeTokenRefresh(cb) {
+  refreshSubscribers.push(cb)
+}
+
+// Execute all queued callbacks with new token
+function onRefreshed(access_token, refresh_token) {
+  refreshSubscribers.forEach(cb => cb(access_token, refresh_token))
+  refreshSubscribers = []
+}
+
+// Handle refresh failure - clear all queued callbacks
+function onRefreshFailed() {
+  refreshSubscribers.forEach(cb => cb(null, null))
+  refreshSubscribers = []
+}
+
 // Attach token on every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
@@ -21,21 +42,59 @@ api.interceptors.response.use(
     const original = err.config
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true
+      
+      // If already refreshing, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((access_token, refresh_token) => {
+            if (access_token) {
+              original.headers.Authorization = `Bearer ${access_token}`
+              resolve(api(original))
+            } else {
+              // Refresh failed - logout
+              localStorage.clear()
+              window.location.href = '/#/login'
+              resolve(Promise.reject(err))
+            }
+          })
+        })
+      }
+      
+      // Start refresh process
+      isRefreshing = true
       const refreshToken = localStorage.getItem('refresh_token')
+      
       if (refreshToken) {
         try {
           const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
-          localStorage.setItem('access_token', data.access_token)
-          localStorage.setItem('refresh_token', data.refresh_token)
-          original.headers.Authorization = `Bearer ${data.access_token}`
+          const { access_token, refresh_token } = data
+          
+          // Store new tokens
+          localStorage.setItem('access_token', access_token)
+          localStorage.setItem('refresh_token', refresh_token)
+          
+          // Notify all queued requests
+          onRefreshed(access_token, refresh_token)
+          isRefreshing = false
+          
+          // Retry original request
+          original.headers.Authorization = `Bearer ${access_token}`
           return api(original)
-        } catch {
+        } catch (refreshErr) {
+          // Refresh failed - logout
+          onRefreshFailed()
+          isRefreshing = false
           localStorage.clear()
           window.location.href = '/#/login'
+          return Promise.reject(refreshErr)
         }
       } else {
+        // No refresh token - logout immediately
+        onRefreshFailed()
+        isRefreshing = false
         localStorage.clear()
         window.location.href = '/#/login'
+        return Promise.reject(err)
       }
     }
     return Promise.reject(err)
