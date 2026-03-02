@@ -56,18 +56,21 @@ export default function AppLayout() {
         sidebarOpen ? 'w-60' : 'w-16'
       )}>
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 h-14 border-b border-surface-700/60">
-          <div className="w-8 h-8 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
-            <Zap size={16} className="text-white" fill="white" />
+        <div className="flex items-center justify-between px-3 h-14 border-b border-surface-700/60">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
+              <Zap size={16} className="text-white" fill="white" />
+            </div>
+            {sidebarOpen && (
+              <span className="font-display font-700 text-white text-lg tracking-tight whitespace-nowrap">
+                TM Alert
+              </span>
+            )}
           </div>
-          {sidebarOpen && (
-            <span className="font-display font-700 text-white text-lg tracking-tight">
-              TM Alert
-            </span>
-          )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="ml-auto text-slate-500 hover:text-slate-300 transition-colors"
+            className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
           >
             {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
