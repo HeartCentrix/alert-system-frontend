@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Bell, Calendar, Inbox, AlertTriangle,
   Users, Group, MapPin, FileText, Settings, LogOut,
@@ -13,8 +13,19 @@ const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
   { label: 'COMMUNICATION', header: true },
   { label: 'Incoming Messages', icon: Inbox, to: '/incoming' },
-  { label: 'Notifications', icon: Bell, to: '/notifications' },
-  { label: 'Scheduled', icon: Calendar, to: '/notifications?status=scheduled' },
+  {
+    label: 'Notifications', icon: Bell, to: '/notifications',
+    // Active on /notifications, /notifications/new, /notifications/:id
+    // but NOT when the scheduled filter query param is present
+    customActive: (pathname, search) =>
+      pathname.startsWith('/notifications') && search !== '?status=scheduled',
+  },
+  {
+    label: 'Scheduled', icon: Calendar, to: '/notifications?status=scheduled',
+    // Active only when on /notifications with the scheduled query param
+    customActive: (pathname, search) =>
+      pathname === '/notifications' && search === '?status=scheduled',
+  },
   { label: 'INCIDENTS', header: true },
   { label: 'Active Incidents', icon: AlertTriangle, to: '/incidents' },
   { label: 'SETTINGS', header: true },
@@ -28,6 +39,7 @@ const NAV = [
 export default function AppLayout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const handleLogout = async () => {
@@ -87,6 +99,24 @@ export default function AppLayout() {
               ) : <div key={i} className="my-2 border-t border-surface-700/40" />
             }
             const Icon = item.icon
+            // Items with customActive bypass NavLink's path-only matching.
+            // IMPORTANT: className must be a FUNCTION, not a string — when NavLink
+            // receives a string it auto-appends "active" based on pathname-only
+            // matching (ignoring query strings), which causes both Notifications
+            // and Scheduled to highlight simultaneously.
+            if (item.customActive) {
+              const active = item.customActive(location.pathname, location.search)
+              return (
+                <NavLink
+                  key={i}
+                  to={item.to}
+                  className={() => cn('nav-item', active && 'active')}
+                >
+                  <Icon size={16} className="shrink-0" />
+                  {sidebarOpen && <span>{item.label}</span>}
+                </NavLink>
+              )
+            }
             return (
               <NavLink
                 key={i}
