@@ -1,47 +1,13 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import {
-  LayoutDashboard, Bell, Calendar, Inbox, AlertTriangle,
-  Users, Group, MapPin, FileText, Settings, LogOut,
-  ChevronLeft, ChevronRight, Zap
-} from 'lucide-react'
+import { Outlet, useNavigate } from 'react-router-dom'
+import Sidebar from './Sidebar'
 import useAuthStore from '@/store/authStore'
-import { cn, getInitials } from '@/utils/helpers'
 import toast from 'react-hot-toast'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-
-const NAV = [
-  { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
-  { label: 'COMMUNICATION', header: true },
-  { label: 'Incoming Messages', icon: Inbox, to: '/incoming' },
-  {
-    label: 'Notifications', icon: Bell, to: '/notifications',
-    // Active on /notifications, /notifications/new, /notifications/:id
-    // but NOT when the scheduled filter query param is present
-    customActive: (pathname, search) =>
-      pathname.startsWith('/notifications') && search !== '?status=scheduled',
-  },
-  {
-    label: 'Scheduled', icon: Calendar, to: '/notifications?status=scheduled',
-    // Active only when on /notifications with the scheduled query param
-    customActive: (pathname, search) =>
-      pathname === '/notifications' && search === '?status=scheduled',
-  },
-  { label: 'INCIDENTS', header: true },
-  { label: 'Active Incidents', icon: AlertTriangle, to: '/incidents' },
-  { label: 'SETTINGS', header: true },
-  { label: 'People', icon: Users, to: '/people' },
-  { label: 'Groups', icon: Group, to: '/groups' },
-  { label: 'Locations', icon: MapPin, to: '/locations' },
-  { label: 'Templates', icon: FileText, to: '/templates' },
-  { label: 'My Account', icon: Settings, to: '/settings' },
-]
 
 export default function AppLayout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
-  const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -52,165 +18,10 @@ export default function AppLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-surface-950">
       {/* Sidebar */}
-      <aside className={cn(
-        'flex flex-col bg-surface-900 border-r border-surface-700/60 transition-all duration-300 shrink-0',
-        sidebarOpen ? 'w-60' : 'w-16'
-      )}>
-        {/* Logo */}
-        {sidebarOpen ? (
-          /* Expanded state: horizontal layout */
-          <div className="flex items-center justify-between px-4 h-14 border-b border-surface-700/60 shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
-                <Zap size={16} className="text-white" fill="white" />
-              </div>
-              <span className="font-display font-700 text-white text-lg tracking-tight whitespace-nowrap">
-                TM Alert
-              </span>
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setSidebarOpen(!sidebarOpen)}
-                    className={cn(
-                      'flex items-center justify-center shrink-0',
-                      'w-11 h-11 min-w-[44px] min-h-[44px]',
-                      'rounded-lg',
-                      'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
-                      'active:bg-surface-700 active:text-white',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
-                      'transition-all duration-200 ease-in-out'
-                    )}
-                    aria-label="Collapse sidebar"
-                  >
-                    <ChevronLeft size={20} strokeWidth={2} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
-                  Collapse sidebar
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        ) : (
-          /* Collapsed state: vertical stacked layout */
-          <div className="flex flex-col items-center py-3 border-b border-surface-700/60 shrink-0">
-            {/* Logo */}
-            <div className="w-11 h-11 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red mb-2">
-              <Zap size={20} className="text-white" fill="white" />
-            </div>
-            {/* Toggle button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setSidebarOpen(!sidebarOpen)}
-                    className={cn(
-                      'flex items-center justify-center shrink-0',
-                      'w-11 h-11 min-w-[44px] min-h-[44px]',
-                      'rounded-lg',
-                      'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
-                      'active:bg-surface-700 active:text-white',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
-                      'transition-all duration-200 ease-in-out'
-                    )}
-                    aria-label="Expand sidebar"
-                  >
-                    <ChevronRight size={20} strokeWidth={2} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
-                  Expand sidebar
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
-
-        {/* New Notification CTA */}
-        <div className="p-3">
-          <button
-            onClick={() => navigate('/notifications/new')}
-            className={cn(
-              'w-full flex items-center gap-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg',
-              'font-medium text-sm transition-all duration-150 active:scale-[0.98] shadow-sm',
-              sidebarOpen ? 'px-3 py-2.5' : 'justify-center p-2.5'
-            )}
-          >
-            <Bell size={15} />
-            {sidebarOpen && <span>+ New Notification</span>}
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
-          {NAV.map((item, i) => {
-            if (item.header) {
-              return sidebarOpen ? (
-                <div key={i} className="px-2 pt-4 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">
-                  {item.label}
-                </div>
-              ) : <div key={i} className="my-2 border-t border-surface-700/40" />
-            }
-            const Icon = item.icon
-            // Items with customActive bypass NavLink's path-only matching.
-            // IMPORTANT: className must be a FUNCTION, not a string — when NavLink
-            // receives a string it auto-appends "active" based on pathname-only
-            // matching (ignoring query strings), which causes both Notifications
-            // and Scheduled to highlight simultaneously.
-            if (item.customActive) {
-              const active = item.customActive(location.pathname, location.search)
-              return (
-                <NavLink
-                  key={i}
-                  to={item.to}
-                  className={() => cn('nav-item', active && 'active')}
-                >
-                  <Icon size={16} className="shrink-0" />
-                  {sidebarOpen && <span>{item.label}</span>}
-                </NavLink>
-              )
-            }
-            return (
-              <NavLink
-                key={i}
-                to={item.to}
-                className={({ isActive }) => cn(
-                  'nav-item',
-                  isActive && 'active'
-                )}
-              >
-                <Icon size={16} className="shrink-0" />
-                {sidebarOpen && <span>{item.label}</span>}
-              </NavLink>
-            )
-          })}
-        </nav>
-
-        {/* User profile */}
-        <div className="p-3 border-t border-surface-700/60">
-          <div className={cn(
-            'flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors',
-            !sidebarOpen && 'justify-center'
-          )}>
-            <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
-              {getInitials(user?.full_name || user?.email || 'U')}
-            </div>
-            {sidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
-                <div className="text-xs text-slate-500 truncate">{user?.role?.replace('_', ' ')}</div>
-              </div>
-            )}
-            {sidebarOpen && (
-              <button onClick={handleLogout} className="text-slate-500 hover:text-danger-400 transition-colors">
-                <LogOut size={15} />
-              </button>
-            )}
-          </div>
-        </div>
-      </aside>
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onCollapseChange={setSidebarCollapsed}
+      />
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
