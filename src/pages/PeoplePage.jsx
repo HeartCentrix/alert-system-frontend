@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Upload, Edit2, Trash2, UserCheck, UserX, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, UserX, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { usersAPI } from '@/services/api'
 import { getInitials, cn } from '@/utils/helpers'
@@ -8,11 +8,31 @@ import toast from 'react-hot-toast'
 
 const ROLES = ['viewer', 'manager', 'admin', 'super_admin']
 
+// Generate a secure temporary password
+function generateTempPassword() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+  const length = 16
+  let password = ''
+  // Ensure at least one of each type
+  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]
+  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]
+  password += '0123456789'[Math.floor(Math.random() * 10)]
+  password += '!@#$%^&*'[Math.floor(Math.random() * 8)]
+  // Fill the rest randomly
+  for (let i = password.length; i < length; i++) {
+    password += chars[Math.floor(Math.random() * chars.length)]
+  }
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('')
+}
+
 function UserModal({ user, onClose, onSaved }) {
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
   })
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [generatedPassword, setGeneratedPassword] = useState(null)
 
   const onSubmit = async (data) => {
     setLoading(true)
@@ -20,12 +40,24 @@ function UserModal({ user, onClose, onSaved }) {
       if (user?.id) {
         await usersAPI.update(user.id, data)
         toast.success('User updated')
+        onSaved()
+        onClose()
       } else {
-        await usersAPI.create({ ...data, password: data.password || 'TempPass@123' })
-        toast.success('User created')
+        // Generate secure password if not provided
+        const password = data.password || generateTempPassword()
+        await usersAPI.create({ ...data, password })
+        
+        // Show generated password if it was auto-generated
+        if (!data.password) {
+          setGeneratedPassword(password)
+          // Don't close modal - let user copy the password first
+          toast.success('User created! Copy the password below')
+        } else {
+          toast.success('User created')
+          onSaved()
+          onClose()
+        }
       }
-      onSaved()
-      onClose()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error saving user')
     } finally {
@@ -57,8 +89,56 @@ function UserModal({ user, onClose, onSaved }) {
           </div>
           {!user && (
             <div>
-              <label className="label">Password (optional — auto-generated if blank)</label>
-              <input {...register('password')} type="password" className="input" placeholder="Min 8 characters" />
+              <label className="label">
+                Password {generatedPassword ? '(auto-generated - copy this!)' : '(optional — auto-generated if blank)'}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  {...register('password', !generatedPassword && { minLength: { value: 8, message: 'Min 8 characters' } })}
+                  type={showPassword ? 'text' : 'password'}
+                  className="input flex-1"
+                  placeholder="Min 8 characters"
+                  disabled={!!generatedPassword}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="btn-ghost px-3"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {generatedPassword && (
+                <div className="mt-2 p-3 bg-warning-900/30 border border-warning-700 rounded">
+                  <p className="text-warning-300 text-sm font-semibold mb-1">
+                    ⚠️ Copy this password now - it won't be shown again!
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <code className="text-warning-200 text-lg font-mono flex-1 bg-warning-900/50 px-3 py-2 rounded">{generatedPassword}</code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedPassword)
+                        toast.success('Password copied to clipboard')
+                      }}
+                      className="btn-primary text-sm whitespace-nowrap"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSaved()
+                      onClose()
+                    }}
+                    className="mt-3 text-sm text-slate-400 hover:text-slate-200"
+                  >
+                    Close & Continue →
+                  </button>
+                </div>
+              )}
             </div>
           )}
           <div className="grid grid-cols-2 gap-4">
