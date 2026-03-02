@@ -2,10 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Zap, AlertCircle, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react'
-import axios from 'axios'
+import { authAPI } from '@/services/api'
 import toast from 'react-hot-toast'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
@@ -32,10 +30,7 @@ export default function ResetPasswordPage() {
     
     setLoading(true)
     try {
-      await axios.post(`${API_URL}/api/v1/auth/reset-password`, {
-        token,
-        new_password
-      })
+      await authAPI.resetPassword(token, new_password)
       toast.success('Password reset successfully! Please sign in.')
       navigate('/login')
     } catch (err) {
