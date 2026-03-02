@@ -210,11 +210,29 @@ export default function PeoplePage() {
     setImporting(true)
     try {
       const { data: result } = await usersAPI.importCSV(file)
-      toast.success(`Import complete: ${result.created} created, ${result.updated} updated, ${result.failed} failed`)
-      if (result.errors?.length) console.warn('Import errors:', result.errors)
+      
+      // Build success message with email notification info
+      let message = `Import complete: ${result.created} created, ${result.updated} updated`
+      if (result.created > 0) {
+        message += `. Welcome emails sent to ${result.created} new user${result.created > 1 ? 's' : ''}`
+      }
+      if (result.failed > 0) {
+        message += `, ${result.failed} failed`
+      }
+      
+      toast.success(message)
+      
+      if (result.errors?.length) {
+        console.warn('Import errors:', result.errors)
+        // Show error toast if there were failures
+        if (result.failed > 0) {
+          toast.error(`${result.failed} row(s) failed - check console for details`)
+        }
+      }
+      
       qc.invalidateQueries(['users'])
     } catch (err) {
-      toast.error('Import failed')
+      toast.error(err.response?.data?.detail || 'Import failed')
     } finally {
       setImporting(false)
       e.target.value = ''
