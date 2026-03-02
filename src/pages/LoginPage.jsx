@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Eye, EyeOff, Zap, AlertCircle } from 'lucide-react'
 import useAuthStore from '@/store/authStore'
@@ -92,9 +92,9 @@ export default function LoginPage() {
             </div>
 
             <div className="flex justify-end">
-              <a href="/forgot-password" className="text-xs text-primary-400 hover:text-primary-300 transition-colors">
+              <Link to="/forgot-password" className="text-xs text-primary-400 hover:text-primary-300 transition-colors">
                 Forgot password?
-              </a>
+              </Link>
             </div>
 
             <button
