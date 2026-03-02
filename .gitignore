@@ -41,4 +41,4 @@ coverage/
 # Misc
 .cache/
 .temp/
-.package-lock.json
+package-lock.json
