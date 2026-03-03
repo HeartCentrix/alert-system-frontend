@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { MapPin, Users, AlertCircle, Loader, Plus, X } from 'lucide-react'
@@ -133,34 +134,17 @@ export default function LocationAudienceMap({
   statusFilter = 'active',
   height = 500,
 }) {
-  const [locations, setLocations] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [selectedLocationId, setSelectedLocationId] = useState(null)
 
-  // Load locations
-  const loadLocations = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await locationsAPI.list()
-      const locationsWithMembers = response.data.map(loc => ({
-        ...loc,
-        // In production, fetch actual member count from location-audience API
-        memberCount: loc.user_count || 0,
-      }))
-      setLocations(locationsWithMembers)
-    } catch (err) {
-      console.error('Failed to load locations:', err)
-      setError('Failed to load locations')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadLocations()
-  }, [loadLocations])
+  // Load locations with auto-refresh
+  const { data: locationsRaw = [], isLoading: loading, error } = useQuery({
+    queryKey: ['locations-map'],
+    queryFn: () => locationsAPI.list().then(r =>
+      r.data.map(loc => ({ ...loc, memberCount: loc.user_count || 0 }))
+    ),
+    refetchInterval: 30000,
+  })
+  const locations = locationsRaw
 
   // Filter locations
   const filteredLocations = locations.filter(loc => {

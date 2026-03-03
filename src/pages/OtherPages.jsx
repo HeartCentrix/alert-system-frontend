@@ -313,6 +313,7 @@ export function LocationsPage() {
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['locations'],
     queryFn: () => locationsAPI.list().then(r => r.data),
+    refetchInterval: 30000,
   })
   const deleteMutation = useMutation({
     mutationFn: (id) => locationsAPI.delete(id),
