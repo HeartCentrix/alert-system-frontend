@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { groupsAPI, locationsAPI, templatesAPI, incidentsAPI } from '@/services/api'
 import { cn, timeAgo, severityColor } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import LocationAutocompleteInput from '@/components/LocationAutocompleteInput'
+import { useNavigate } from 'react-router-dom'
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
@@ -307,6 +308,7 @@ function LocationModal({ location, onClose, onSaved }) {
 
 export function LocationsPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [modal, setModal] = useState(null)
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['locations'],
@@ -337,6 +339,13 @@ export function LocationsPage() {
                 <MapPin size={16} className="text-primary-400" />
               </div>
               <div className="flex gap-1">
+                <button
+                  onClick={() => navigate(`/locations/${loc.id}/members`)}
+                  className="p-1.5 text-slate-500 hover:text-primary-400 hover:bg-surface-700 rounded"
+                  title="Manage members"
+                >
+                  <UserPlus size={14} />
+                </button>
                 <button onClick={() => setModal(loc)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={13} /></button>
                 <button onClick={() => confirm('Delete?') && deleteMutation.mutate(loc.id)} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
               </div>
