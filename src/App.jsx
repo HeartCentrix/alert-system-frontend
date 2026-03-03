@@ -13,6 +13,8 @@ import PeoplePage from '@/pages/PeoplePage'
 import { GroupsPage, LocationsPage, TemplatesPage, IncidentsPage } from '@/pages/OtherPages'
 import IncomingPage from '@/pages/IncomingPage'
 import SettingsPage from '@/pages/SettingsPage'
+import PrivacyPolicy from '@/pages/PrivacyPolicy'
+import TermsAndConditions from '@/pages/TermsAndConditions'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuthStore()
@@ -54,6 +56,8 @@ export default function App() {
           <Route path="incoming" element={<IncomingPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsAndConditions />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
