@@ -152,6 +152,28 @@ export const locationsAPI = {
   delete: (id) => api.delete(`/locations/${id}`),
 }
 
+// ─── LOCATION AUTOCOMPLETE ────────────────────────────────────────────────────
+export const locationAutocompleteAPI = {
+  /**
+   * Search for locations using LocationIQ autocomplete
+   * @param {string} query - Search query (min 3 characters)
+   * @param {object} options - Optional parameters
+   * @param {number} options.limit - Number of results (1-20, default 10)
+   * @param {string} options.countrycodes - Comma-separated country codes (e.g., 'us,ca')
+   * @param {string} options.viewbox - Bounding box for biasing: 'x1,y1,x2,y2'
+   * @param {boolean} options.bounded - Restrict results to viewbox
+   */
+  search: (query, options = {}) => {
+    const params = new URLSearchParams({ q: query })
+    if (options.limit) params.append('limit', options.limit.toString())
+    if (options.countrycodes) params.append('countrycodes', options.countrycodes)
+    if (options.viewbox) params.append('viewbox', options.viewbox)
+    if (options.bounded) params.append('bounded', '1')
+    return api.get(`/location/autocomplete?${params.toString()}`)
+  },
+  health: () => api.get('/location/health'),
+}
+
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 export const templatesAPI = {
   list: (params) => api.get('/templates', { params }),

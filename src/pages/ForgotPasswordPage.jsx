@@ -1,24 +1,55 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Zap, AlertCircle, Mail, ArrowLeft } from 'lucide-react'
 import { authAPI } from '@/services/api'
 import toast from 'react-hot-toast'
 
+// More permissive email regex that supports all valid TLDs
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+const COOLDOWN_SECONDS = 30
+const COOLDOWN_STORAGE_KEY = 'password_reset_cooldown'
+
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [cooldown, setCooldown] = useState(() => {
+    // Restore cooldown from localStorage on mount
+    const saved = localStorage.getItem(COOLDOWN_STORAGE_KEY)
+    if (saved) {
+      const remaining = Math.ceil((parseInt(saved) - Date.now()) / 1000)
+      return Math.max(0, remaining)
+    }
+    return 0
+  })
   const { register, handleSubmit, formState: { errors } } = useForm()
+
+  // Persist cooldown to localStorage and run timer
+  useEffect(() => {
+    if (cooldown > 0) {
+      const expiryTime = Date.now() + (cooldown * 1000)
+      localStorage.setItem(COOLDOWN_STORAGE_KEY, expiryTime.toString())
+      
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000)
+      return () => clearTimeout(timer)
+    } else {
+      // Clear storage when cooldown ends
+      localStorage.removeItem(COOLDOWN_STORAGE_KEY)
+    }
+  }, [cooldown])
 
   const onSubmit = async ({ email }) => {
     setLoading(true)
     try {
-      await authAPI.forgotPassword(email)
+      await authAPI.forgotPassword(email.trim().toLowerCase())
       setSubmitted(true)
-      toast.success('Password reset email sent!')
+      setCooldown(COOLDOWN_SECONDS)
+      // Always show same message to prevent email enumeration
+      toast.success('If that email exists, we\'ve sent a password reset link.')
     } catch (err) {
-      console.error('Forgot password error:', err.response?.data)
-      toast.error(err.response?.data?.detail || 'Failed to send reset email')
+      // Always show same message even on error to prevent enumeration
+      toast.success('If that email exists, we\'ve sent a password reset link.')
+      console.error('Forgot password error:', err)
     } finally {
       setLoading(false)
     }
@@ -65,10 +96,10 @@ export default function ForgotPasswordPage() {
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                   <input
-                    {...register('email', { 
+                    {...register('email', {
                       required: 'Email is required',
                       pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                        value: EMAIL_REGEX,
                         message: 'Invalid email address'
                       }
                     })}
@@ -87,7 +118,7 @@ export default function ForgotPasswordPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || cooldown > 0}
                 className="btn-primary w-full justify-center py-2.5"
               >
                 {loading ? (
@@ -97,6 +128,11 @@ export default function ForgotPasswordPage() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                     Sending...
+                  </span>
+                ) : cooldown > 0 ? (
+                  <span className="flex items-center gap-2">
+                    <Mail size={18} />
+                    Resend in {cooldown}s
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
@@ -113,17 +149,22 @@ export default function ForgotPasswordPage() {
               </div>
               <h2 className="font-display font-semibold text-lg text-white mb-2">Check Your Email</h2>
               <p className="text-slate-400 text-sm mb-6">
-                We've sent a password reset link to your email address.
+                If that email exists in our system, we've sent a password reset link.
                 The link will expire in 1 hour.
               </p>
               <p className="text-slate-500 text-xs">
-                Didn't receive the email? Check your spam folder or try again.
+                Didn't receive the email? Check your spam folder{cooldown > 0 ? `. Resend available in ${cooldown} seconds.` : '.'}
               </p>
               <button
                 onClick={() => setSubmitted(false)}
-                className="mt-4 text-sm text-primary-400 hover:text-primary-300 transition-colors"
+                disabled={cooldown > 0}
+                className={`mt-4 text-sm transition-colors ${
+                  cooldown > 0
+                    ? 'text-slate-600 cursor-not-allowed'
+                    : 'text-primary-400 hover:text-primary-300'
+                }`}
               >
-                Try another email
+                Resend Email
               </button>
             </div>
           )}

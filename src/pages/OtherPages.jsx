@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { groupsAPI, locationsAPI, templatesAPI, incidentsAPI } from '@/services/api'
 import { cn, timeAgo, severityColor } from '@/utils/helpers'
 import toast from 'react-hot-toast'
+import LocationAutocompleteInput from '@/components/LocationAutocompleteInput'
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
@@ -125,9 +126,75 @@ export function GroupsPage() {
 // ─── LOCATIONS ────────────────────────────────────────────────────────────────
 
 function LocationModal({ location, onClose, onSaved }) {
-  const { register, handleSubmit } = useForm({ defaultValues: location || { country: 'USA', geofence_radius_miles: 1.0 } })
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+    defaultValues: location || { country: 'USA', geofence_radius_miles: 1.0 }
+  })
   const [loading, setLoading] = useState(false)
+
+  // Watch location name and coordinates for autocomplete
+  const locationName = watch('name')
+  const latitude = watch('latitude')
+  const longitude = watch('longitude')
+
+  // Custom validation for location name
+  const validateLocationName = (value) => {
+    if (!value || !value.trim()) {
+      return 'Location name is required'
+    }
+    if (value.trim().length < 3) {
+      return 'Location name must be at least 3 characters'
+    }
+    return true
+  }
+
+  // Register validation for name field
+  useEffect(() => {
+    register('name', {
+      required: 'Location name is required',
+      validate: validateLocationName,
+    })
+  }, [register])
+
+  // Handle location selection from autocomplete
+  const handleLocationSelect = ({ display_name, latitude, longitude, address }) => {
+    // Fill in the address fields from the selected location
+    setValue('address', display_name, { shouldValidate: true })
+    setValue('latitude', latitude, { shouldValidate: true })
+    setValue('longitude', longitude, { shouldValidate: true })
+    if (address?.city) setValue('city', address.city, { shouldValidate: true })
+    if (address?.state) setValue('state', address.state, { shouldValidate: true })
+    if (address?.postcode) setValue('zip_code', address.postcode, { shouldValidate: true })
+    if (address?.country) setValue('country', address.country, { shouldValidate: true })
+  }
+
+  // Handle manual edit (clear lat/lon)
+  const handleLocationClear = () => {
+    setValue('latitude', null)
+    setValue('longitude', null)
+    setValue('address', '')
+    setValue('city', '')
+    setValue('state', '')
+    setValue('zip_code', '')
+  }
+
+  // Custom validation to ensure coordinates are filled
+  const validateCoordinates = () => {
+    const lat = watch('latitude')
+    const lon = watch('longitude')
+    if (!lat || !lon) {
+      return 'Please select a location from the suggestions'
+    }
+    return true
+  }
+
   const onSubmit = async (data) => {
+    // Validate coordinates before submit
+    const coordValidation = validateCoordinates()
+    if (coordValidation !== true) {
+      toast.error(coordValidation)
+      return
+    }
+
     setLoading(true)
     try {
       location ? await locationsAPI.update(location.id, data) : await locationsAPI.create(data)
@@ -136,6 +203,7 @@ function LocationModal({ location, onClose, onSaved }) {
     } catch { toast.error('Error saving location') }
     finally { setLoading(false) }
   }
+  
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="card w-full max-w-lg animate-fade-in">
@@ -146,11 +214,40 @@ function LocationModal({ location, onClose, onSaved }) {
         <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
           <div>
             <label className="label">Location Name *</label>
-            <input {...register('name', { required: true })} className="input" placeholder="e.g. Phoenix HQ" />
+            <LocationAutocompleteInput
+              value={locationName || ''}
+              onChange={(e) => setValue('name', e.target.value)}
+              latitude={watch('latitude')}
+              longitude={watch('longitude')}
+              onLocationSelect={handleLocationSelect}
+              onLocationClear={handleLocationClear}
+              placeholder="Search for a location (e.g., New Delhi, India)"
+              clearable
+              required
+              options={{
+                // Removed countrycodes restriction to allow global search
+                // Add countrycodes: 'us' if you want to restrict to US only
+                limit: 10,
+                debounceMs: 450, // Optimized debounce
+                minRequestInterval: 800, // Rate limiting: 800ms between API calls
+                maxCacheSize: 20, // localStorage cache size
+                cacheTTL: 600000, // 10 minutes cache TTL
+              }}
+            />
+            {errors.name && (
+              <p className="mt-1 text-xs text-danger-400 flex items-center gap-1">
+                <AlertCircle size={11} /> {errors.name.message}
+              </p>
+            )}
+            {!errors.name && (
+              <p className="text-xs text-slate-500 mt-1">
+                Start typing to search. Select a location to auto-fill coordinates.
+              </p>
+            )}
           </div>
           <div>
             <label className="label">Street Address</label>
-            <input {...register('address')} className="input" />
+            <input {...register('address')} className="input" placeholder="Auto-filled when you select a location" />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -169,11 +266,27 @@ function LocationModal({ location, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Latitude</label>
-              <input {...register('latitude', { valueAsNumber: true })} type="number" step="any" className="input" placeholder="33.4484" />
+              <input 
+                {...register('latitude', { valueAsNumber: true })} 
+                type="number" 
+                step="any" 
+                className="input font-mono text-sm" 
+                placeholder="33.4484"
+                readOnly
+              />
+              <p className="text-xs text-slate-500 mt-1">Auto-filled from selection</p>
             </div>
             <div>
               <label className="label">Longitude</label>
-              <input {...register('longitude', { valueAsNumber: true })} type="number" step="any" className="input" placeholder="-112.074" />
+              <input 
+                {...register('longitude', { valueAsNumber: true })} 
+                type="number" 
+                step="any" 
+                className="input font-mono text-sm" 
+                placeholder="-112.074"
+                readOnly
+              />
+              <p className="text-xs text-slate-500 mt-1">Auto-filled from selection</p>
             </div>
           </div>
           <div>
