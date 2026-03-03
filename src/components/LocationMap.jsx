@@ -57,7 +57,7 @@ function FitBounds({ locations }) {
   return null
 }
 
-export default function LocationMap({ locations = [], height = 320 }) {
+export default function LocationMap({ locations = [], height = 320, onLocationClick }) {
   const validLocations = locations.filter(l => l.latitude && l.longitude)
 
   // Default center: USA
@@ -83,6 +83,9 @@ export default function LocationMap({ locations = [], height = 320 }) {
             key={loc.id}
             position={[loc.latitude, loc.longitude]}
             icon={createIcon(loc.user_count || 0)}
+            eventHandlers={onLocationClick ? {
+              click: () => onLocationClick(loc.id),
+            } : {}}
           >
             <Popup>
               <div style={{
@@ -96,7 +99,12 @@ export default function LocationMap({ locations = [], height = 320 }) {
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>{loc.name}</div>
                 <div style={{ color: '#94a3b8', fontSize: 12 }}>{loc.city}, {loc.state}</div>
                 <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
-                  <span style={{ color: '#60a5fa', fontWeight: 600 }}>{loc.user_count || 0} people</span>
+                  <span
+                    style={{ color: '#60a5fa', fontWeight: 600, cursor: onLocationClick ? 'pointer' : 'default' }}
+                    onClick={(e) => { if (onLocationClick) { e.stopPropagation(); onLocationClick(loc.id) } }}
+                  >
+                    {loc.user_count || 0} people →
+                  </span>
                 </div>
               </div>
             </Popup>

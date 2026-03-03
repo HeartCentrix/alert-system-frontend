@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { useParams } from 'react-router-dom'
 import {
   Users, UserPlus, X, MapPin, Calendar, Clock, AlertCircle,
-  CheckCircle, UserCheck, Filter, Search, Loader, Trash2, Info, RefreshCw
+  CheckCircle, UserCheck, Filter, Search, Loader, Trash2, Info
 } from 'lucide-react'
 import { locationAudienceAPI, usersAPI, locationsAPI, authAPI } from '@/services/api'
 import toast from 'react-hot-toast'
@@ -39,7 +39,7 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
   // Fetch users for dropdown
   const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['users', 'active'],
-    queryFn: () => usersAPI.list({ status: 'active' }).then(r => r.data).catch(err => {
+    queryFn: () => usersAPI.list({ is_active: true }).then(r => r.data?.items || []).catch(err => {
       console.error('Failed to load users:', err)
       return []
     }),
@@ -59,9 +59,10 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
 
   const assignMutation = useMutation({
     mutationFn: (data) => locationAudienceAPI.assignUser({
-      ...data,
       user_id: parseInt(data.user_id),
-      location_id: locationId,
+      location_id: parseInt(locationId),
+      notes: data.notes || null,
+      expires_at: data.expires_at || null,
     }),
     onSuccess: () => {
       toast.success('User assigned to location successfully')
@@ -334,17 +335,28 @@ function MemberDetailsModal({ member, onClose, onRemove }) {
           )}
 
           {member.assignment_type === 'geofence' && (
-            <div className="pt-4 border-t border-surface-700">
+            <div className="pt-4 border-t border-surface-700 space-y-3">
               <div className="p-3 bg-info-900/20 border border-info-500/30 rounded-lg">
                 <div className="flex items-start gap-2">
                   <Info size={16} className="text-info-400 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-info-300">
                     This user was automatically assigned based on their geolocation.
-                    To remove them, you can use the Remove button, or they will be
-                    automatically removed when they move outside the geofence.
+                    They will be automatically removed when they move outside the geofence.
                   </p>
                 </div>
               </div>
+              {member.status === 'active' && (
+                <button
+                  onClick={() => {
+                    onRemove(member)
+                    onClose()
+                  }}
+                  className="btn-danger w-full justify-center"
+                >
+                  <Trash2 size={16} />
+                  Remove from Location
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -364,7 +376,6 @@ export default function LocationMembersPage() {
   const [removeConfirm, setRemoveConfirm] = useState(null)
   const [statusFilter, setStatusFilter] = useState('active')
   const [typeFilter, setTypeFilter] = useState('all')
-  const [checkingLocation, setCheckingLocation] = useState(false)
 
   // Validate locationId
   if (!locationId) {
@@ -394,12 +405,21 @@ export default function LocationMembersPage() {
         return { total: 0, items: [] }
       })
     },
+    refetchInterval: 30000,
   })
 
   // Fetch location details
   const { data: location } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => locationsAPI.list().then(r => r.data.find(l => l.id === locationId)),
+    queryKey: ['location', locationId],
+    queryFn: async () => {
+      try {
+        const response = await locationsAPI.list()
+        return response.data.find(l => l.id === parseInt(locationId)) || null
+      } catch (err) {
+        console.error('Failed to load location:', err)
+        return null
+      }
+    },
     enabled: !!locationId,
   })
 
@@ -421,51 +441,6 @@ export default function LocationMembersPage() {
   const handleRemove = (member) => {
     if (window.confirm(`Remove ${member.user_name} from this location?`)) {
       removeMutation.mutate({ userId: member.user_id, reason: 'Manual removal' })
-    }
-  }
-
-  // Manual geofence check - trigger user location update
-  const handleCheckMyLocation = async () => {
-    setCheckingLocation(true)
-    try {
-      // Get user's current location from browser
-      if (!navigator.geolocation) {
-        toast.error('Geolocation is not supported by your browser')
-        return
-      }
-
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        })
-      })
-
-      const { latitude, longitude } = position.coords
-
-      // Call API to update geofence
-      await locationAudienceAPI.updateGeofence(latitude, longitude)
-
-      toast.success(`Location updated! Checking geofences...`)
-      
-      // Refresh the members list after a short delay (allow Celery to process)
-      setTimeout(() => {
-        refetch()
-      }, 2000)
-
-    } catch (err) {
-      console.error('Geofence check failed:', err)
-      if (err.code === 1) {
-        toast.error('Location permission denied. Please enable location access.')
-      } else if (err.code === 2) {
-        toast.error('Unable to retrieve your location. Please try again.')
-      } else {
-        const message = err.response?.data?.detail || 'Failed to update location'
-        toast.error(message)
-      }
-    } finally {
-      setCheckingLocation(false)
     }
   }
 
@@ -491,24 +466,13 @@ export default function LocationMembersPage() {
             Manage user assignments for this location
           </p>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={handleCheckMyLocation}
-            disabled={checkingLocation}
-            className="btn-outline flex items-center gap-2"
-            title="Trigger geofence check with your current location"
-          >
-            <RefreshCw size={18} className={checkingLocation ? 'animate-spin' : ''} />
-            Check My Location
-          </button>
-          <button
-            onClick={() => setAssignModal(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <UserPlus size={18} />
-            Assign User
-          </button>
-        </div>
+        <button
+          onClick={() => setAssignModal(true)}
+          className="btn-primary flex items-center gap-2"
+        >
+          <UserPlus size={18} />
+          Assign User
+        </button>
       </div>
 
       {/* Stats */}
@@ -716,7 +680,7 @@ export default function LocationMembersPage() {
 
       {/* Map View */}
       {location && (
-        <div className="card p-4">
+        <div className="card p-4 relative z-0">
           <h3 className="font-semibold text-white mb-3">Location Map</h3>
           <div className="h-96 rounded-lg overflow-hidden">
             <LocationAudienceMap

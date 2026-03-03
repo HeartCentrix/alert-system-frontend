@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const { data: mapData } = useQuery({
     queryKey: ['map-data'],
     queryFn: () => dashboardAPI.mapData().then(r => r.data),
+    refetchInterval: 30000,
   })
 
   const { data: activity } = useQuery({
@@ -146,7 +147,7 @@ export default function DashboardPage() {
                 No locations configured yet
               </div>
             ) : (
-              <LocationMap locations={mapData?.locations || []} height={280} />
+              <LocationMap locations={mapData?.locations || []} height={280} onLocationClick={(id) => navigate(`/locations/${id}/members`)} />
             )}
 
             {/* Summary row */}
