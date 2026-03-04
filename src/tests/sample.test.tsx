@@ -3,10 +3,10 @@
  * 
  * This is an example test file. Replace with actual tests for your components.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, useState, useEffect } from 'vitest';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithProviders, createMockUser } from '../utils';
+import { renderWithProviders, createMockUser } from './utils';
 
 // Example test suite - replace with actual component imports and tests
 describe('Sample Test Suite', () => {
@@ -65,30 +65,4 @@ describe('Sample Test Suite', () => {
       expect(handleClick).toHaveBeenCalledTimes(1);
     });
   });
-
-  describe('Async Operations', () => {
-    it('should handle async data loading', async () => {
-      const mockData = { name: 'Test Data' };
-      
-      const AsyncComponent = () => {
-        const [data, setData] = useState<any>(null);
-        
-        useEffect(() => {
-          setTimeout(() => setData(mockData), 100);
-        }, []);
-        
-        if (!data) {
-          return <div>Loading...</div>;
-        }
-        
-        return <div data-testid="data">{data.name}</div>;
-      };
-      
-      // This is a placeholder - actual implementation would use React Query
-      expect(true).toBe(true);
-    });
-  });
 });
-
-// Import needed for the async test above
-import { useState, useEffect } from 'react';
