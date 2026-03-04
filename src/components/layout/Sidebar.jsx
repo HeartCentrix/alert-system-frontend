@@ -63,7 +63,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
             <button
               onClick={toggleSidebar}
               className={cn(
-                'absolute -right-11 top-3 z-10 flex items-center justify-center shrink-0',
+                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
                 'w-11 h-11 min-w-[44px] min-h-[44px]',
                 'rounded-lg',
                 'bg-surface-900 border border-surface-700/60',
@@ -86,7 +86,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
 
       {/* Sidebar */}
       <aside className={cn(
-        'flex flex-col h-full bg-surface-900 border-r border-surface-700/60 transition-all duration-300 shrink-0',
+        'flex flex-col h-full bg-surface-900 border-r border-surface-700/60 transition-all duration-300 shrink-0 relative z-30',
         sidebarOpen ? 'w-60' : 'w-16'
       )}>
         {/* Logo */}
