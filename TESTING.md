@@ -5,7 +5,8 @@
 - **Test Runner:** Vitest (Vite-native, fast)
 - **Testing Library:** React Testing Library
 - **Mocking:** Vitest mocks, MSW for API
-- **E2E:** Playwright (future)
+- **E2E:** Playwright
+- **CI/CD:** GitHub Actions
 
 ## Setup
 
@@ -13,6 +14,19 @@
 # Install test dependencies
 npm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom @vitest/coverage-v8 msw
 ```
+
+## CI/CD Pipeline
+
+Tests automatically run on GitHub Actions on every push/PR:
+
+- ✅ **Lint & Type Check** - ESLint + TypeScript
+- ✅ **Unit Tests** - Vitest with coverage
+- ✅ **Component Tests** - React Testing Library
+- ✅ **Build Verification** - Production build
+- ✅ **E2E Tests** - Playwright (main branch)
+- ✅ **Deploy** - Vercel (main/develop branches)
+
+See [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) for pipeline configuration.
 
 ## Test Structure
 
