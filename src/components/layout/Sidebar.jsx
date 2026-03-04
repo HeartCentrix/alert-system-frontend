@@ -55,7 +55,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
 
   return (
-    <div className="relative">
+    <div className="relative h-full">
       {/* Toggle Button - Outside sidebar at top-right */}
       <TooltipProvider>
         <Tooltip>
@@ -63,7 +63,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
             <button
               onClick={toggleSidebar}
               className={cn(
-                'absolute -right-11 top-3 z-10 flex items-center justify-center shrink-0',
+                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
                 'w-11 h-11 min-w-[44px] min-h-[44px]',
                 'rounded-lg',
                 'bg-surface-900 border border-surface-700/60',
@@ -86,7 +86,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
 
       {/* Sidebar */}
       <aside className={cn(
-        'flex flex-col bg-surface-900 border-r border-surface-700/60 transition-all duration-300 shrink-0',
+        'flex flex-col h-full bg-surface-900 border-r border-surface-700/60 transition-all duration-300 shrink-0 relative z-30',
         sidebarOpen ? 'w-60' : 'w-16'
       )}>
         {/* Logo */}
@@ -125,7 +125,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
         {NAV.map((item, i) => {
           if (item.header) {
             return sidebarOpen ? (
@@ -164,8 +164,8 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
         })}
       </nav>
 
-      {/* User profile */}
-      <div className="p-3 border-t border-surface-700/60">
+      {/* User profile - sticks to bottom */}
+      <div className="mt-auto p-3 border-t border-surface-700/60">
         <div className={cn(
           'flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors',
           !sidebarOpen && 'justify-center'
