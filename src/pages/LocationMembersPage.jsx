@@ -66,6 +66,7 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
     }),
     onSuccess: () => {
       toast.success('User assigned to location successfully')
+      // Call parent's onAssigned handler which handles query invalidation
       onAssigned()
       onClose()
     },
@@ -429,6 +430,9 @@ export default function LocationMembersPage() {
       locationAudienceAPI.removeUser(userId, locationId, reason),
     onSuccess: () => {
       toast.success('User removed from location')
+      // Invalidate all map-related queries for real-time updates
+      qc.invalidateQueries({ queryKey: ['locations-map'] })
+      qc.invalidateQueries({ queryKey: ['map-data'] })
       refetch()
       setRemoveConfirm(null)
     },
@@ -699,6 +703,9 @@ export default function LocationMembersPage() {
           locationName={location?.name}
           onClose={() => setAssignModal(false)}
           onAssigned={() => {
+            // Invalidate all map-related queries for real-time updates
+            qc.invalidateQueries({ queryKey: ['locations-map'] })
+            qc.invalidateQueries({ queryKey: ['map-data'] })
             refetch()
             setAssignModal(false)
           }}
