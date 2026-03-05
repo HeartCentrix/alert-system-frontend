@@ -31,11 +31,16 @@ function ProtectedRoute({ children }) {
 }
 
 export default function App() {
-  const { init } = useAuthStore()
+  const { init, isAuthenticated, isLoading } = useAuthStore()
 
   useEffect(() => {
+    console.log('[App] Initializing auth, current state:', { isAuthenticated, isLoading })
     init()
   }, [init])
+
+  useEffect(() => {
+    console.log('[App] Auth state changed:', { isAuthenticated, isLoading })
+  }, [isAuthenticated, isLoading])
 
   return (
     <BrowserRouter>

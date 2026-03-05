@@ -15,10 +15,13 @@ export default function LoginPage() {
   const onSubmit = async ({ email, password }) => {
     setLoading(true)
     try {
+      console.log('[Login] Attempting login for:', email)
       await login(email, password)
+      console.log('[Login] Login successful')
       toast.success('Welcome back')
       navigate('/dashboard')
     } catch (err) {
+      console.error('[Login] Error:', err)
       toast.error(err.response?.data?.detail || 'Invalid credentials')
     } finally {
       setLoading(false)
