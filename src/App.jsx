@@ -11,6 +11,7 @@ import NewNotificationPage from '@/pages/NewNotificationPage'
 import { NotificationsListPage, NotificationDetailPage } from '@/pages/NotificationsPage'
 import PeoplePage from '@/pages/PeoplePage'
 import { GroupsPage, LocationsPage, TemplatesPage, IncidentsPage } from '@/pages/OtherPages'
+import LocationMembersPage from '@/pages/LocationMembersPage'
 import IncomingPage from '@/pages/IncomingPage'
 import SettingsPage from '@/pages/SettingsPage'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="people" element={<PeoplePage />} />
           <Route path="groups" element={<GroupsPage />} />
           <Route path="locations" element={<LocationsPage />} />
+          <Route path="locations/:locationId/members" element={<LocationMembersPage />} />
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="incoming" element={<IncomingPage />} />
           <Route path="settings" element={<SettingsPage />} />

@@ -152,6 +152,98 @@ export const locationsAPI = {
   delete: (id) => api.delete(`/locations/${id}`),
 }
 
+// ─── LOCATION AUTOCOMPLETE ────────────────────────────────────────────────────
+export const locationAutocompleteAPI = {
+  /**
+   * Search for locations using LocationIQ autocomplete
+   * @param {string} query - Search query (min 3 characters)
+   * @param {object} options - Optional parameters
+   * @param {number} options.limit - Number of results (1-20, default 10)
+   * @param {string} options.countrycodes - Comma-separated country codes (e.g., 'us,ca')
+   * @param {string} options.viewbox - Bounding box for biasing: 'x1,y1,x2,y2'
+   * @param {boolean} options.bounded - Restrict results to viewbox
+   */
+  search: (query, options = {}) => {
+    const params = new URLSearchParams({ q: query })
+    if (options.limit) params.append('limit', options.limit.toString())
+    if (options.countrycodes) params.append('countrycodes', options.countrycodes)
+    if (options.viewbox) params.append('viewbox', options.viewbox)
+    if (options.bounded) params.append('bounded', '1')
+    return api.get(`/location/autocomplete?${params.toString()}`)
+  },
+  health: () => api.get('/location/health'),
+}
+
+// ─── LOCATION AUDIENCE MANAGEMENT ─────────────────────────────────────────────
+export const locationAudienceAPI = {
+  /**
+   * Manually assign a user to a location
+   * @param {object} data - Assignment data
+   * @param {number} data.user_id - User ID
+   * @param {number} data.location_id - Location ID
+   * @param {string} [data.notes] - Optional notes
+   * @param {string} [data.expires_at] - Optional expiration
+   */
+  assignUser: (data) => api.post('/location-audience/assign', data),
+  
+  /**
+   * Remove a user from a location
+   * @param {number} userId - User ID
+   * @param {number} locationId - Location ID
+   * @param {string} [reason] - Removal reason
+   */
+  removeUser: (userId, locationId, reason = null) => 
+    api.post('/location-audience/remove', { reason }, {
+      params: { user_id: userId, location_id: locationId }
+    }),
+  
+  /**
+   * Update user's geofence location
+   * @param {number} latitude - User's latitude
+   * @param {number} longitude - User's longitude
+   */
+  updateGeofence: (latitude, longitude) => 
+    api.post('/location-audience/geofence/update', { latitude, longitude }),
+  
+  /**
+   * Get all members of a location
+   * @param {number} locationId - Location ID
+   * @param {object} params - Query parameters
+   * @param {number} [params.page] - Page number
+   * @param {number} [params.page_size] - Items per page
+   * @param {string} [params.status] - Filter by status (active/inactive)
+   * @param {string} [params.assignment_type] - Filter by type (manual/geofence)
+   */
+  getLocationMembers: (locationId, params = {}) => 
+    api.get(`/location-audience/location/${locationId}/members`, { params }),
+  
+  /**
+   * Get all locations for a user
+   * @param {number} userId - User ID
+   * @param {boolean} [includeInactive] - Include inactive assignments
+   */
+  getUserLocations: (userId, includeInactive = false) => 
+    api.get(`/location-audience/user/${userId}/locations`, {
+      params: { include_inactive: includeInactive }
+    }),
+  
+  /**
+   * Get location membership history
+   * @param {number} locationId - Location ID
+   * @param {object} params - Query parameters
+   * @param {number} [params.page] - Page number
+   * @param {number} [params.page_size] - Items per page
+   * @param {string} [params.action] - Filter by action type
+   */
+  getLocationHistory: (locationId, params = {}) => 
+    api.get(`/location-audience/location/${locationId}/history`, { params }),
+  
+  /**
+   * Get location audience statistics
+   */
+  getStats: () => api.get('/location-audience/stats'),
+}
+
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 export const templatesAPI = {
   list: (params) => api.get('/templates', { params }),
