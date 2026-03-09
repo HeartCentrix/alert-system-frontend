@@ -288,10 +288,6 @@ function PasswordTab() {
   const [success, setSuccess] = useState(false)
 
   const onSubmit = async (data) => {
-    if (data.new_password !== data.confirm_password) {
-      toast.error('New passwords do not match')
-      return
-    }
     setLoading(true)
     try {
       await authAPI.changePassword(data.current_password, data.new_password)
@@ -348,11 +344,17 @@ function PasswordTab() {
         <div>
           <label className="label">Confirm New Password</label>
           <input
-            {...register('confirm_password', { required: 'Required' })}
+            {...register('confirm_password', {
+              required: 'Required',
+              validate: value => value === watch('new_password') || 'Passwords do not match'
+            })}
             type="password"
             className="input"
             autoComplete="new-password"
           />
+          {errors.confirm_password && (
+            <p className="text-xs text-danger-400 mt-1">{errors.confirm_password.message}</p>
+          )}
         </div>
         <button type="submit" disabled={loading} className="btn-primary">
           {loading ? 'Changing...' : 'Change Password'}
