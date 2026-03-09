@@ -296,6 +296,8 @@ export function GroupsPage() {
       toast.error(err.response?.data?.detail || 'Failed to delete group')
     },
   })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
   
   // Check if user can manage members for a specific group
   // Manager: can only manage groups they are a member of
@@ -358,8 +360,32 @@ export function GroupsPage() {
                           <UserPlus size={14} />
                         </button>
                       )}
-                      <button onClick={() => setModal(g)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={14} /></button>
-                      <button onClick={() => confirm('Delete group?') && deleteMutation.mutate(g.id)} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={14} /></button>
+                      <button
+                        onClick={() => setModal(g)}
+                        className="p-1.5 text-slate-500 hover:text-slate-300"
+                        disabled={isDeleting(g.id)}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => confirm('Delete group?') && deleteMutation.mutate(g.id)}
+                        disabled={isDeleting(g.id)}
+                        className={cn(
+                          "p-1.5 transition-colors",
+                          isDeleting(g.id)
+                            ? "text-slate-700 cursor-not-allowed"
+                            : "text-slate-500 hover:text-danger-400"
+                        )}
+                      >
+                        {isDeleting(g.id) ? (
+                          <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
                     </div>
                   </td>
                 )}
@@ -584,6 +610,8 @@ export function LocationsPage() {
       toast.error(err.response?.data?.detail || 'Failed to delete location')
     },
   })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -609,11 +637,36 @@ export function LocationsPage() {
                   onClick={() => navigate(`/locations/${loc.id}/members`)}
                   className="p-1.5 text-slate-500 hover:text-primary-400 hover:bg-surface-700 rounded"
                   title="Manage members"
+                  disabled={isDeleting(loc.id)}
                 >
                   <UserPlus size={14} />
                 </button>
-                <button onClick={() => setModal(loc)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={13} /></button>
-                <button onClick={() => confirm('Delete?') && deleteMutation.mutate(loc.id)} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
+                <button
+                  onClick={() => setModal(loc)}
+                  className="p-1.5 text-slate-500 hover:text-slate-300"
+                  disabled={isDeleting(loc.id)}
+                >
+                  <Edit2 size={13} />
+                </button>
+                <button
+                  onClick={() => confirm('Delete?') && deleteMutation.mutate(loc.id)}
+                  disabled={isDeleting(loc.id)}
+                  className={cn(
+                    "p-1.5 transition-colors",
+                    isDeleting(loc.id)
+                      ? "text-slate-700 cursor-not-allowed"
+                      : "text-slate-500 hover:text-danger-400"
+                  )}
+                >
+                  {isDeleting(loc.id) ? (
+                    <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <Trash2 size={13} />
+                  )}
+                </button>
               </div>
             </div>
             <h3 className="font-semibold text-slate-200 mb-0.5">{loc.name}</h3>
@@ -657,6 +710,8 @@ export function TemplatesPage() {
       toast.error(err.response?.data?.detail || 'Failed to delete template')
     },
   })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
 
   function TemplateModal({ template, onClose }) {
     const { register, handleSubmit, reset } = useForm({ defaultValues: template || { channels: ['sms', 'email'] } })
@@ -726,8 +781,32 @@ export function TemplatesPage() {
             <div className="flex items-start justify-between mb-2">
               <span className="badge-blue text-xs">{t.category || 'general'}</span>
               <div className="flex gap-1">
-                <button onClick={() => setModal(t)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={13} /></button>
-                <button onClick={() => { if (confirm(`Delete template "${t.name}"? This action cannot be undone.`)) deleteMutation.mutate(t.id) }} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
+                <button
+                  onClick={() => setModal(t)}
+                  className="p-1.5 text-slate-500 hover:text-slate-300"
+                  disabled={isDeleting(t.id)}
+                >
+                  <Edit2 size={13} />
+                </button>
+                <button
+                  onClick={() => { if (confirm(`Delete template "${t.name}"? This action cannot be undone.`)) deleteMutation.mutate(t.id) }}
+                  disabled={isDeleting(t.id)}
+                  className={cn(
+                    "p-1.5 transition-colors",
+                    isDeleting(t.id)
+                      ? "text-slate-700 cursor-not-allowed"
+                      : "text-slate-500 hover:text-danger-400"
+                  )}
+                >
+                  {isDeleting(t.id) ? (
+                    <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <Trash2 size={13} />
+                  )}
+                </button>
               </div>
             </div>
             <h3 className="font-semibold text-slate-200 text-sm mb-1">{t.name}</h3>

@@ -368,7 +368,7 @@ export default function PeoplePage() {
       qc.invalidateQueries({ queryKey: ['users'] })
       setSelectedUsers(new Set())
       setBulkDeleteModal(false)
-      
+
       const { deleted, failed } = data.data
       if (deleted > 0) {
         toast.success(`Successfully deleted ${deleted} user${deleted !== 1 ? 's' : ''}`)
@@ -381,6 +381,9 @@ export default function PeoplePage() {
       toast.error(err.response?.data?.detail || 'Error deleting users')
     },
   })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
+  const isBulkDeleting = bulkDeleteMutation.isPending
 
   const handleImport = async (e) => {
     const file = e.target.files[0]
@@ -501,9 +504,22 @@ export default function PeoplePage() {
             </span>
             <button
               onClick={handleBulkDelete}
-              className="btn-danger text-sm"
+              disabled={isBulkDeleting}
+              className="btn-danger text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Trash2 size={14} /> Delete Selected
+              {isBulkDeleting ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={14} /> Delete Selected
+                </>
+              )}
             </button>
           </div>
         )}
@@ -599,6 +615,7 @@ export default function PeoplePage() {
                       <button
                         onClick={() => setModal(u)}
                         className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+                        disabled={isDeleting(u.id)}
                       >
                         <Edit2 size={14} />
                       </button>
@@ -606,16 +623,23 @@ export default function PeoplePage() {
                         onClick={() => {
                           if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id)
                         }}
-                        disabled={isSelf}
+                        disabled={isSelf || isDeleting(u.id)}
                         className={cn(
                           "p-1.5 transition-colors",
-                          isSelf 
-                            ? "text-slate-700 cursor-not-allowed" 
+                          isSelf || isDeleting(u.id)
+                            ? "text-slate-700 cursor-not-allowed"
                             : "text-slate-500 hover:text-danger-400"
                         )}
-                        title={isSelf ? "You cannot delete yourself" : "Delete"}
+                        title={isSelf ? "You cannot delete yourself" : isDeleting(u.id) ? "Deleting..." : "Delete"}
                       >
-                        <Trash2 size={14} />
+                        {isDeleting(u.id) ? (
+                          <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
                       </button>
                     </div>
                   </td>
