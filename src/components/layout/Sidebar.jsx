@@ -17,12 +17,12 @@ const NAV = [
   {
     label: 'Notifications', icon: Bell, to: '/notifications',
     customActive: (pathname, search) =>
-      pathname.startsWith('/notifications') && search !== '?status=scheduled',
+      pathname.startsWith('/notifications') && !new URLSearchParams(search).has('status'),
   },
   {
     label: 'Scheduled', icon: Calendar, to: '/notifications?status=scheduled',
     customActive: (pathname, search) =>
-      pathname === '/notifications' && search === '?status=scheduled',
+      pathname === '/notifications' && new URLSearchParams(search).get('status') === 'scheduled',
   },
   { label: 'INCIDENTS', header: true },
   { label: 'Active Incidents', icon: AlertTriangle, to: '/incidents' },
