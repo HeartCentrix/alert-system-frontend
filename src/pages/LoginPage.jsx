@@ -83,10 +83,12 @@ export default function LoginPage() {
     } catch (err) {
       // Extract error message and retry-after header
       const message = err.response?.data?.detail || err.message || 'Invalid credentials'
-      const retryAfterSeconds = err.response?.headers?.['retry-after']
+      // Axios normalizes headers to lowercase, check both variants
+      const retryAfterSeconds = err.response?.headers?.['retry-after'] || err.response?.headers?.['Retry-After']
 
       if (retryAfterSeconds) {
         const seconds = parseInt(retryAfterSeconds)
+        console.log('[Login] Rate limited, retry-after:', seconds, 'seconds')
         // Store expiry timestamp so countdown continues correctly across navigation
         setLockoutExpiry(Date.now() + (seconds * 1000))
         toast.error(`${message}. Try again in ${formatCountdown(seconds)}.`)
