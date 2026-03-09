@@ -343,14 +343,14 @@ export default function PeoplePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => usersAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries(['users']); toast.success('User deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
     onError: (err) => toast.error(err.response?.data?.detail || 'Error'),
   })
 
   const bulkDeleteMutation = useMutation({
     mutationFn: (userIds) => usersAPI.bulkDelete(userIds),
     onSuccess: (data) => {
-      qc.invalidateQueries(['users'])
+      qc.invalidateQueries({ queryKey: ['users'] })
       setSelectedUsers(new Set())
       setBulkDeleteModal(false)
       
@@ -393,7 +393,7 @@ export default function PeoplePage() {
         }
       }
 
-      qc.invalidateQueries(['users'])
+      qc.invalidateQueries({ queryKey: ['users'] })
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Import failed')
     } finally {
@@ -633,7 +633,7 @@ export default function PeoplePage() {
         <UserModal
           user={modal === 'create' ? null : modal}
           onClose={() => setModal(null)}
-          onSaved={() => qc.invalidateQueries(['users'])}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['users'] })}
         />
       )}
 

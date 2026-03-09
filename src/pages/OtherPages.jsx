@@ -285,7 +285,7 @@ export function GroupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries(['groups']); toast.success('Group deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); toast.success('Group deleted') },
     onError: (err) => {
       toast.error(err.response?.data?.detail || 'Failed to delete group')
     },
@@ -362,12 +362,12 @@ export function GroupsPage() {
           </tbody>
         </table>
       </div>
-      {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries(['groups'])} />}
+      {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries({ queryKey: ['groups'] })} />}
       {membersModal && (
         <GroupMembersModal
           group={membersModal}
           onClose={() => setMembersModal(null)}
-          onSaved={() => qc.invalidateQueries(['groups'])}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['groups'] })}
         />
       )}
     </div>
@@ -567,7 +567,7 @@ export function LocationsPage() {
   })
   const deleteMutation = useMutation({
     mutationFn: (id) => locationsAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries(['locations']); toast.success('Location deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['locations'] }); toast.success('Location deleted') },
     onError: (err) => {
       toast.error(err.response?.data?.detail || 'Failed to delete location')
     },
@@ -622,7 +622,7 @@ export function LocationsPage() {
           </div>
         ))}
       </div>
-      {modal && <LocationModal location={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries(['locations'])} />}
+      {modal && <LocationModal location={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries({ queryKey: ['locations'] })} />}
     </div>
   )
 }
@@ -639,7 +639,7 @@ export function TemplatesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => templatesAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries(['templates']); toast.success('Template deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['templates'] }); toast.success('Template deleted') },
     onError: (err) => {
       toast.error(err.response?.data?.detail || 'Failed to delete template')
     },
@@ -653,7 +653,7 @@ export function TemplatesPage() {
       try {
         template ? await templatesAPI.update(template.id, data) : await templatesAPI.create(data)
         toast.success('Template saved')
-        qc.invalidateQueries(['templates']); onClose()
+        qc.invalidateQueries({ queryKey: ['templates'] }); onClose()
       } catch { toast.error('Error') }
       finally { setLoading(false) }
     }
@@ -741,7 +741,7 @@ export function IncidentsPage() {
       try {
         incident ? await incidentsAPI.update(incident.id, data) : await incidentsAPI.create(data)
         toast.success(incident ? 'Incident updated' : 'Incident created')
-        qc.invalidateQueries(['incidents']); onClose()
+        qc.invalidateQueries({ queryKey: ['incidents'] }); onClose()
       } catch { toast.error('Error') }
       finally { setLoading(false) }
     }
