@@ -12,8 +12,13 @@ import useAuthStore from '@/store/authStore'
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
 function GroupModal({ group, onClose, onSaved }) {
-  const { register, handleSubmit } = useForm({ defaultValues: group || { type: 'static' } })
+  const { register, handleSubmit, reset } = useForm({ defaultValues: group || { type: 'static' } })
   const [loading, setLoading] = useState(false)
+
+  // Reset form when group prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset(group || { type: 'static' })
+  }, [group, reset])
   const onSubmit = async (data) => {
     setLoading(true)
     try {
@@ -378,10 +383,15 @@ export function GroupsPage() {
 // ─── LOCATIONS ────────────────────────────────────────────────────────────────
 
 function LocationModal({ location, onClose, onSaved }) {
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     defaultValues: location || { country: 'USA', geofence_radius_miles: 1.0 }
   })
   const [loading, setLoading] = useState(false)
+
+  // Reset form when location prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset(location || { country: 'USA', geofence_radius_miles: 1.0 })
+  }, [location, reset])
 
   // Watch location name and coordinates for autocomplete
   const locationName = watch('name')
@@ -649,8 +659,13 @@ export function TemplatesPage() {
   })
 
   function TemplateModal({ template, onClose }) {
-    const { register, handleSubmit } = useForm({ defaultValues: template || { channels: ['sms', 'email'] } })
+    const { register, handleSubmit, reset } = useForm({ defaultValues: template || { channels: ['sms', 'email'] } })
     const [loading, setLoading] = useState(false)
+
+    // Reset form when template prop changes (prevents stale values on re-mount)
+    useEffect(() => {
+      reset(template || { channels: ['sms', 'email'] })
+    }, [template, reset])
     const onSubmit = async (data) => {
       setLoading(true)
       try {
@@ -738,8 +753,13 @@ export function IncidentsPage() {
   const incidents = incidentsData || []
 
   function IncidentModal({ incident, onClose }) {
-    const { register, handleSubmit } = useForm({ defaultValues: incident || { severity: 'medium' } })
+    const { register, handleSubmit, reset } = useForm({ defaultValues: incident || { severity: 'medium' } })
     const [loading, setLoading] = useState(false)
+
+    // Reset form when incident prop changes (prevents stale values on re-mount)
+    useEffect(() => {
+      reset(incident || { severity: 'medium' })
+    }, [incident, reset])
     const onSubmit = async (data) => {
       setLoading(true)
       try {

@@ -59,8 +59,8 @@ function ProfileTab({ user }) {
   const { updateUser } = useAuthStore()
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
-  
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     defaultValues: {
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
@@ -71,6 +71,19 @@ function ProfileTab({ user }) {
       preferred_channels: user?.preferred_channels || ['sms', 'email'],
     }
   })
+
+  // Reset form when user prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset({
+      first_name: user?.first_name || '',
+      last_name: user?.last_name || '',
+      phone: user?.phone || '',
+      department: user?.department || '',
+      title: user?.title || '',
+      location_id: user?.location_id || '',
+      preferred_channels: user?.preferred_channels || ['sms', 'email'],
+    })
+  }, [user, reset])
 
   // Fetch locations for the dropdown
   const { data: locationsData } = useQuery({

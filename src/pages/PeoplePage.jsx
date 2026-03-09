@@ -48,12 +48,17 @@ function cleanUserData(data) {
 }
 
 function UserModal({ user, onClose, onSaved }) {
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
   })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState(null)
+
+  // Reset form when user prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset(user || { role: 'viewer', preferred_channels: ['sms', 'email'] })
+  }, [user, reset])
   
   // Fetch locations for the dropdown
   const { data: locationsData } = useQuery({
