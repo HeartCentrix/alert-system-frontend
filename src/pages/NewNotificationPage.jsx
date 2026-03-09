@@ -534,6 +534,7 @@ export default function NewNotificationPage() {
         scheduled_at: v.scheduled_at || undefined,
         slack_webhook_url: v.slack_webhook_url || undefined,
         teams_webhook_url: v.teams_webhook_url || undefined,
+        incident_type: v.incident_type || undefined,
         incident_id: v.incident_id ? parseInt(v.incident_id) : undefined,
       }
       const { data } = await notificationsAPI.create(payload)
