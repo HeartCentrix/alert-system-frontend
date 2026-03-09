@@ -709,7 +709,7 @@ export function TemplatesPage() {
               <span className="badge-blue text-xs">{t.category || 'general'}</span>
               <div className="flex gap-1">
                 <button onClick={() => setModal(t)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={13} /></button>
-                <button onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(t.id) }} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
+                <button onClick={() => { if (confirm(`Delete template "${t.name}"? This action cannot be undone.`)) deleteMutation.mutate(t.id) }} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
               </div>
             </div>
             <h3 className="font-semibold text-slate-200 text-sm mb-1">{t.name}</h3>
