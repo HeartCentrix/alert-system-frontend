@@ -388,6 +388,15 @@ export default function PeoplePage() {
   const handleImport = async (e) => {
     const file = e.target.files[0]
     if (!file) return
+
+    // Validate file type using MIME type (not just extension)
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error(`Invalid file type. Expected CSV, got ${file.type || 'unknown'}`)
+      e.target.value = ''
+      return
+    }
+
     setImporting(true)
     try {
       const { data: result } = await usersAPI.importCSV(file)
