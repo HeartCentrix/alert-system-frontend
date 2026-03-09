@@ -166,25 +166,44 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
 
       {/* User profile - sticks to bottom */}
       <div className="mt-auto p-3 border-t border-surface-700/60">
-        <div className={cn(
-          'flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors',
-          !sidebarOpen && 'justify-center'
-        )}>
-          <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {getInitials(user?.full_name || user?.email || 'U')}
-          </div>
-          {sidebarOpen && (
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
-              <div className="text-xs text-slate-500 truncate">{user?.role?.replace('_', ' ')}</div>
-            </div>
-          )}
-          {sidebarOpen && (
-            <button onClick={handleLogout} className="text-slate-500 hover:text-danger-400 transition-colors">
-              <LogOut size={15} />
-            </button>
-          )}
-        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className={cn(
+                'flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors',
+                !sidebarOpen && 'justify-center'
+              )}>
+                <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {getInitials(user?.full_name || user?.email || 'U')}
+                </div>
+                {sidebarOpen && (
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
+                    <div className="text-xs text-slate-500 truncate">{user?.role?.replace('_', ' ')}</div>
+                  </div>
+                )}
+                {sidebarOpen ? (
+                  <button onClick={handleLogout} className="text-slate-500 hover:text-danger-400 transition-colors" title="Logout">
+                    <LogOut size={15} />
+                  </button>
+                ) : (
+                  <button onClick={handleLogout} className="text-slate-500 hover:text-danger-400 transition-colors" title="Logout">
+                    <LogOut size={18} />
+                  </button>
+                )}
+              </div>
+            </TooltipTrigger>
+            {!sidebarOpen && (
+              <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+                <div className="text-center">
+                  <div className="font-medium">{user?.full_name}</div>
+                  <div className="text-xs text-slate-400">{user?.role?.replace('_', ' ')}</div>
+                  <div className="text-xs text-danger-400 mt-1">Click to logout</div>
+                </div>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </aside>
     </div>
