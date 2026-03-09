@@ -376,10 +376,12 @@ export default function PeoplePage() {
 
   const toggleSelectAll = () => {
     const users = data?.items || []
-    if (selectedUsers.size === users.length) {
+    const selectableUsers = users.filter(u => u.id !== currentUser?.id)
+    const allSelectableSelected = selectableUsers.every(u => selectedUsers.has(u.id))
+    if (allSelectableSelected) {
       setSelectedUsers(new Set())
     } else {
-      setSelectedUsers(new Set(users.map(u => u.id)))
+      setSelectedUsers(new Set(selectableUsers.map(u => u.id)))
     }
   }
 
