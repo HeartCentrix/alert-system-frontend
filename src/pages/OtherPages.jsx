@@ -286,6 +286,9 @@ export function GroupsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries(['groups']); toast.success('Group deleted') },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete group')
+    },
   })
   
   // Check if user can manage members for a specific group
@@ -565,6 +568,9 @@ export function LocationsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => locationsAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries(['locations']); toast.success('Location deleted') },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete location')
+    },
   })
   return (
     <div className="space-y-5 animate-fade-in">
@@ -631,6 +637,14 @@ export function TemplatesPage() {
     queryFn: () => templatesAPI.list().then(r => r.data),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id) => templatesAPI.delete(id),
+    onSuccess: () => { qc.invalidateQueries(['templates']); toast.success('Template deleted') },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete template')
+    },
+  })
+
   function TemplateModal({ template, onClose }) {
     const { register, handleSubmit } = useForm({ defaultValues: template || { channels: ['sms', 'email'] } })
     const [loading, setLoading] = useState(false)
@@ -695,7 +709,7 @@ export function TemplatesPage() {
               <span className="badge-blue text-xs">{t.category || 'general'}</span>
               <div className="flex gap-1">
                 <button onClick={() => setModal(t)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={13} /></button>
-                <button onClick={() => confirm('Delete?') && templatesAPI.delete(t.id).then(() => { qc.invalidateQueries(['templates']); toast.success('Deleted') })} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
+                <button onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(t.id) }} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
               </div>
             </div>
             <h3 className="font-semibold text-slate-200 text-sm mb-1">{t.name}</h3>
