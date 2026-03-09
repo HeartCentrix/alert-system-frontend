@@ -276,12 +276,13 @@ export function GroupsPage() {
   const isAdminOrAbove = ['admin', 'super_admin'].includes(currentUser?.role)
 
   // Fetch all groups list - called every time user navigates to Groups page
-  const { data: groups = [], isLoading } = useQuery({
+  const { data: groupsData, isLoading } = useQuery({
     queryKey: ['groups'],
     queryFn: () => groupsAPI.list().then(r => r.data),
     refetchOnMount: 'always',
     staleTime: 0,
   })
+  const groups = groupsData || []
 
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
@@ -560,11 +561,12 @@ export function LocationsPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [modal, setModal] = useState(null)
-  const { data: locations = [], isLoading } = useQuery({
+  const { data: locationsData, isLoading } = useQuery({
     queryKey: ['locations'],
     queryFn: () => locationsAPI.list().then(r => r.data),
     refetchInterval: 30000,
   })
+  const locations = locationsData || []
   const deleteMutation = useMutation({
     mutationFn: (id) => locationsAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['locations'] }); toast.success('Location deleted') },
@@ -632,10 +634,11 @@ export function LocationsPage() {
 export function TemplatesPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
-  const { data: templates = [], isLoading } = useQuery({
+  const { data: templatesData, isLoading } = useQuery({
     queryKey: ['templates'],
     queryFn: () => templatesAPI.list().then(r => r.data),
   })
+  const templates = templatesData || []
 
   const deleteMutation = useMutation({
     mutationFn: (id) => templatesAPI.delete(id),
@@ -727,11 +730,12 @@ export function TemplatesPage() {
 export function IncidentsPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
-  const { data: incidents = [], isLoading } = useQuery({
+  const { data: incidentsData, isLoading } = useQuery({
     queryKey: ['incidents'],
     queryFn: () => incidentsAPI.list().then(r => r.data),
     refetchInterval: 30000,
   })
+  const incidents = incidentsData || []
 
   function IncidentModal({ incident, onClose }) {
     const { register, handleSubmit } = useForm({ defaultValues: incident || { severity: 'medium' } })

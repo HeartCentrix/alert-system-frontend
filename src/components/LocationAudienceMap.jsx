@@ -140,7 +140,7 @@ export default function LocationAudienceMap({
   const { data: locationsRaw = [], isLoading: loading, error } = useQuery({
     queryKey: ['locations-map'],
     queryFn: () => locationsAPI.list().then(r =>
-      r.data.map(loc => ({ ...loc, memberCount: loc.user_count || 0 }))
+      (r.data || []).map(loc => ({ ...loc, memberCount: loc.user_count || 0 }))
     ),
     refetchInterval: 30000,
   })
