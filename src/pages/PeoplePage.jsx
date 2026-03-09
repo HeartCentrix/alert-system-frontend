@@ -27,6 +27,26 @@ function generateTempPassword() {
   return password.split('').sort(() => Math.random() - 0.5).join('')
 }
 
+// Clean form data by converting empty strings to null and removing empty location_id
+function cleanUserData(data) {
+  const cleaned = { ...data }
+  
+  // Convert empty strings to null for optional fields
+  const optionalFields = ['phone', 'department', 'title', 'employee_id']
+  optionalFields.forEach(field => {
+    if (cleaned[field] === '' || cleaned[field] === null || cleaned[field] === undefined) {
+      delete cleaned[field]
+    }
+  })
+  
+  // Handle location_id - convert empty string to undefined (omit from request)
+  if (cleaned.location_id === '' || cleaned.location_id === null || cleaned.location_id === undefined) {
+    delete cleaned.location_id
+  }
+  
+  return cleaned
+}
+
 function UserModal({ user, onClose, onSaved }) {
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
@@ -34,19 +54,34 @@ function UserModal({ user, onClose, onSaved }) {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState(null)
+  
+  // Fetch locations for the dropdown
+  const { data: locationsData } = useQuery({
+    queryKey: ['locations'],
+    queryFn: async () => {
+      const { locationsAPI } = await import('@/services/api')
+      const response = await locationsAPI.list()
+      return response.data || []
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+  const locations = locationsData || []
 
   const onSubmit = async (data) => {
     setLoading(true)
     try {
+      // Clean the data to remove empty strings
+      const cleanedData = cleanUserData(data)
+      
       if (user?.id) {
-        await usersAPI.update(user.id, data)
+        await usersAPI.update(user.id, cleanedData)
         toast.success('User updated')
         onSaved()
         onClose()
       } else {
         // Generate secure password if not provided
         const password = data.password || generateTempPassword()
-        await usersAPI.create({ ...data, password })
+        await usersAPI.create({ ...cleanedData, password })
 
         // Show generated password if it was auto-generated
         if (!data.password) {
@@ -144,33 +179,38 @@ function UserModal({ user, onClose, onSaved }) {
           )}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Phone (SMS/Voice)</label>
+              <label className="label">Phone (SMS/Voice) (optional)</label>
               <input {...register('phone')} className="input" placeholder="+1 555 000 0000" />
             </div>
             <div>
-              <label className="label">WhatsApp</label>
-              <input {...register('whatsapp_number')} className="input" placeholder="+1 555 000 0000" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Department</label>
+              <label className="label">Department (optional)</label>
               <input {...register('department')} className="input" />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Title</label>
+              <label className="label">Title (optional)</label>
               <input {...register('title')} className="input" />
+            </div>
+            <div>
+              <label className="label">Employee ID (optional)</label>
+              <input {...register('employee_id')} className="input" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Employee ID</label>
-              <input {...register('employee_id')} className="input" />
-            </div>
-            <div>
-              <label className="label">Role</label>
+              <label className="label">Role (optional)</label>
               <select {...register('role')} className="select">
                 {ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Location (optional)</label>
+              <select {...register('location_id')} className="select">
+                <option value="">None</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
               </select>
             </div>
           </div>

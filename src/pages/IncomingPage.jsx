@@ -22,7 +22,7 @@ export default function IncomingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Incoming Messages</h1>
-          <p className="text-slate-500 text-sm">Employee SMS/WhatsApp replies and safety check-ins</p>
+          <p className="text-slate-500 text-sm">Employee SMS replies and safety check-ins</p>
         </div>
         <button
           onClick={() => refetch()}

@@ -32,7 +32,7 @@ src/
 │   ├── NotificationsPage.jsx    # List + detail with delivery tracker
 │   ├── PeoplePage.jsx       # User management + CSV import
 │   ├── OtherPages.jsx       # Groups, Locations, Templates, Incidents
-│   ├── IncomingPage.jsx     # SMS/WhatsApp replies from employees
+│   ├── IncomingPage.jsx     # SMS replies from employees
 │   └── SettingsPage.jsx     # Profile + password change
 ├── components/layout/
 │   └── AppLayout.jsx        # Sidebar + top bar
@@ -56,7 +56,7 @@ src/
 - **Locations** — site management with Google Maps links
 - **Templates** — reusable messages by category
 - **Incidents** — severity-coded incident tracker
-- **Incoming messages** — employee SMS/WhatsApp replies auto-refresh every 10s
+- **Incoming messages** — employee SMS replies auto-refresh every 10s
 - **JWT auth** — access + refresh token, auto-renewal on 401
 
 ---
