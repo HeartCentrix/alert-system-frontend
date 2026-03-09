@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Upload, Edit2, Trash2, UserCheck, UserX, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, UserX, ChevronLeft, ChevronRight, Eye, EyeOff, CheckSquare, Square, AlertTriangle } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { usersAPI } from '@/services/api'
 import { getInitials, cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
+import useAuthStore from '@/store/authStore'
 
 const ROLES = ['viewer', 'manager', 'admin', 'super_admin']
 
@@ -46,7 +47,7 @@ function UserModal({ user, onClose, onSaved }) {
         // Generate secure password if not provided
         const password = data.password || generateTempPassword()
         await usersAPI.create({ ...data, password })
-        
+
         // Show generated password if it was auto-generated
         if (!data.password) {
           setGeneratedPassword(password)
@@ -185,13 +186,115 @@ function UserModal({ user, onClose, onSaved }) {
   )
 }
 
+function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
+  const [loading, setLoading] = useState(false)
+  
+  const selectedUsersData = allUsers.filter(u => selectedUsers.has(u.id))
+  const currentUser = useAuthStore(state => state.user)
+  const isSelfSelected = selectedUsers.has(currentUser?.id)
+  
+  // Filter out current user from deletion
+  const usersToDelete = selectedUsersData.filter(u => u.id !== currentUser?.id)
+
+  const handleConfirm = async () => {
+    setLoading(true)
+    try {
+      await onConfirmed(usersToDelete.map(u => u.id))
+    } catch (err) {
+      // Error handled by parent
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="card w-full max-w-md animate-fade-in">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-danger-900/30 flex items-center justify-center shrink-0">
+              <AlertTriangle size={24} className="text-danger-400" />
+            </div>
+            <div>
+              <h2 className="font-display font-semibold text-white text-lg">Delete Users Permanently</h2>
+              <p className="text-slate-400 text-sm">This action cannot be undone</p>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <p className="text-slate-300 mb-3">
+              You are about to permanently delete <span className="font-semibold text-danger-400">{usersToDelete.length} user{usersToDelete.length !== 1 ? 's' : ''}</span>:
+            </p>
+            
+            <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
+              {usersToDelete.map(u => (
+                <div key={u.id} className="flex items-center gap-3 p-2 bg-surface-800/50 rounded">
+                  <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
+                    {getInitials(u.full_name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-slate-200 truncate">{u.full_name}</div>
+                    <div className="text-xs text-slate-500 truncate">{u.email}</div>
+                  </div>
+                  <span className={cn(
+                    'badge text-xs',
+                    u.role === 'super_admin' ? 'badge-red' :
+                    u.role === 'admin' ? 'badge-orange' :
+                    u.role === 'manager' ? 'badge-blue' : 'badge-gray'
+                  )}>{u.role?.replace('_', ' ')}</span>
+                </div>
+              ))}
+            </div>
+
+            {isSelfSelected && (
+              <div className="mt-3 p-3 bg-warning-900/30 border border-warning-700 rounded">
+                <p className="text-warning-300 text-sm">
+                  ⚠️ You cannot delete yourself. Your account has been excluded from this deletion.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="p-3 bg-danger-900/20 border border-danger-700/50 rounded mb-4">
+            <p className="text-danger-300 text-xs">
+              <strong>Warning:</strong> All user data, including their notification history and responses, will be permanently deleted.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="btn-outline flex-1"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={loading || usersToDelete.length === 0}
+              className="btn-danger flex-1 justify-center"
+            >
+              {loading ? 'Deleting...' : `Delete ${usersToDelete.length} User${usersToDelete.length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PeoplePage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null) // null | 'create' | user object
+  const [bulkDeleteModal, setBulkDeleteModal] = useState(false)
+  const [selectedUsers, setSelectedUsers] = useState(new Set())
   const fileRef = useRef()
   const [importing, setImporting] = useState(false)
+  
+  const currentUser = useAuthStore(state => state.user)
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, search],
@@ -204,13 +307,33 @@ export default function PeoplePage() {
     onError: (err) => toast.error(err.response?.data?.detail || 'Error'),
   })
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (userIds) => usersAPI.bulkDelete(userIds),
+    onSuccess: (data) => {
+      qc.invalidateQueries(['users'])
+      setSelectedUsers(new Set())
+      setBulkDeleteModal(false)
+      
+      const { deleted, failed } = data.data
+      if (deleted > 0) {
+        toast.success(`Successfully deleted ${deleted} user${deleted !== 1 ? 's' : ''}`)
+      }
+      if (failed > 0) {
+        toast.error(`${failed} user${failed !== 1 ? 's' : ''} could not be deleted`)
+      }
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Error deleting users')
+    },
+  })
+
   const handleImport = async (e) => {
     const file = e.target.files[0]
     if (!file) return
     setImporting(true)
     try {
       const { data: result } = await usersAPI.importCSV(file)
-      
+
       // Build success message with email notification info
       let message = `Import complete: ${result.created} created, ${result.updated} updated`
       if (result.created > 0) {
@@ -219,9 +342,9 @@ export default function PeoplePage() {
       if (result.failed > 0) {
         message += `, ${result.failed} failed`
       }
-      
+
       toast.success(message)
-      
+
       if (result.errors?.length) {
         console.warn('Import errors:', result.errors)
         // Show error toast if there were failures
@@ -229,7 +352,7 @@ export default function PeoplePage() {
           toast.error(`${result.failed} row(s) failed - check console for details`)
         }
       }
-      
+
       qc.invalidateQueries(['users'])
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Import failed')
@@ -239,9 +362,46 @@ export default function PeoplePage() {
     }
   }
 
+  const toggleSelectUser = (userId) => {
+    setSelectedUsers(prev => {
+      const next = new Set(prev)
+      if (next.has(userId)) {
+        next.delete(userId)
+      } else {
+        next.add(userId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    const users = data?.items || []
+    if (selectedUsers.size === users.length) {
+      setSelectedUsers(new Set())
+    } else {
+      setSelectedUsers(new Set(users.map(u => u.id)))
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedUsers.size === 0) return
+    setBulkDeleteModal(true)
+  }
+
+  const handleBulkDeleteConfirm = async (userIds) => {
+    return new Promise((resolve, reject) => {
+      bulkDeleteMutation.mutate(userIds, {
+        onSuccess: () => resolve(),
+        onError: (err) => reject(err),
+      })
+    })
+  }
+
   const users = data?.items || []
   const total = data?.total || 0
   const totalPages = Math.ceil(total / 20)
+  const allSelected = users.length > 0 && selectedUsers.size === users.length
+  const someSelected = selectedUsers.size > 0 && selectedUsers.size < users.length
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -265,15 +425,31 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative w-72">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-        <input
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1) }}
-          className="input pl-9"
-          placeholder="Search name, email, department..."
-        />
+      {/* Search and Bulk Actions */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative w-72">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            className="input pl-9"
+            placeholder="Search name, email, department..."
+          />
+        </div>
+        
+        {isAdmin && selectedUsers.size > 0 && (
+          <div className="flex items-center gap-2 animate-fade-in">
+            <span className="text-sm text-slate-400">
+              {selectedUsers.size} selected
+            </span>
+            <button
+              onClick={handleBulkDelete}
+              className="btn-danger text-sm"
+            >
+              <Trash2 size={14} /> Delete Selected
+            </button>
+          </div>
+        )}
       </div>
 
       {/* CSV download template */}
@@ -285,6 +461,17 @@ export default function PeoplePage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-surface-700/60">
+              {isAdmin && (
+                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3 w-12">
+                  <button
+                    onClick={toggleSelectAll}
+                    className="hover:text-slate-300 transition-colors"
+                    title={allSelected ? 'Deselect all' : 'Select all'}
+                  >
+                    {allSelected ? <CheckSquare size={16} /> : someSelected ? <CheckSquare size={16} className="text-primary-400" /> : <Square size={16} />}
+                  </button>
+                </th>
+              )}
               {['Person', 'Contact', 'Department', 'Role', 'Status', ''].map(h => (
                 <th key={h} className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-5 py-3 first:px-5">{h}</th>
               ))}
@@ -292,62 +479,92 @@ export default function PeoplePage() {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={6} className="text-center py-12 text-slate-500">Loading...</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12 text-slate-500">Loading...</td></tr>
             )}
             {!isLoading && users.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-12 text-slate-500 text-sm">No people found</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12 text-slate-500 text-sm">No people found</td></tr>
             )}
-            {users.map(u => (
-              <tr key={u.id} className="table-row">
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
-                      {getInitials(u.full_name)}
+            {users.map(u => {
+              const isSelected = selectedUsers.has(u.id)
+              const isSelf = u.id === currentUser?.id
+              
+              return (
+                <tr key={u.id} className={cn(
+                  "table-row",
+                  isSelected ? "bg-primary-900/20" : ""
+                )}>
+                  {isAdmin && (
+                    <td className="px-4 py-3.5">
+                      <button
+                        onClick={() => toggleSelectUser(u.id)}
+                        disabled={isSelf}
+                        className={cn(
+                          "hover:text-slate-300 transition-colors",
+                          isSelf ? "text-slate-700 cursor-not-allowed" : isSelected ? "text-primary-400" : "text-slate-500"
+                        )}
+                        title={isSelf ? "You cannot delete yourself" : isSelected ? "Deselect" : "Select"}
+                      >
+                        {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                      </button>
+                    </td>
+                  )}
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
+                        {getInitials(u.full_name)}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-slate-200">{u.full_name}</div>
+                        <div className="text-xs text-slate-500">{u.employee_id && `#${u.employee_id}`}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm font-medium text-slate-200">{u.full_name}</div>
-                      <div className="text-xs text-slate-500">{u.employee_id && `#${u.employee_id}`}</div>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="text-xs text-slate-400">{u.email}</div>
+                    {u.phone && <div className="text-xs text-slate-500 font-mono">{u.phone}</div>}
+                  </td>
+                  <td className="px-5 py-3.5 text-sm text-slate-400">{u.department || '—'}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={cn(
+                      'badge',
+                      u.role === 'super_admin' ? 'badge-red' :
+                      u.role === 'admin' ? 'badge-orange' :
+                      u.role === 'manager' ? 'badge-blue' : 'badge-gray'
+                    )}>{u.role?.replace('_', ' ')}</span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className={u.is_active ? 'badge-green' : 'badge-red'}>
+                      {u.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setModal(u)}
+                        className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id)
+                        }}
+                        disabled={isSelf}
+                        className={cn(
+                          "p-1.5 transition-colors",
+                          isSelf 
+                            ? "text-slate-700 cursor-not-allowed" 
+                            : "text-slate-500 hover:text-danger-400"
+                        )}
+                        title={isSelf ? "You cannot delete yourself" : "Delete"}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="text-xs text-slate-400">{u.email}</div>
-                  {u.phone && <div className="text-xs text-slate-500 font-mono">{u.phone}</div>}
-                </td>
-                <td className="px-5 py-3.5 text-sm text-slate-400">{u.department || '—'}</td>
-                <td className="px-5 py-3.5">
-                  <span className={cn(
-                    'badge',
-                    u.role === 'super_admin' ? 'badge-red' :
-                    u.role === 'admin' ? 'badge-orange' :
-                    u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                  )}>{u.role?.replace('_', ' ')}</span>
-                </td>
-                <td className="px-5 py-3.5">
-                  <span className={u.is_active ? 'badge-green' : 'badge-red'}>
-                    {u.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={() => setModal(u)}
-                      className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id)
-                      }}
-                      className="p-1.5 text-slate-500 hover:text-danger-400 transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
 
@@ -375,6 +592,15 @@ export default function PeoplePage() {
           user={modal === 'create' ? null : modal}
           onClose={() => setModal(null)}
           onSaved={() => qc.invalidateQueries(['users'])}
+        />
+      )}
+
+      {bulkDeleteModal && (
+        <BulkDeleteModal
+          selectedUsers={selectedUsers}
+          allUsers={users}
+          onClose={() => setBulkDeleteModal(false)}
+          onConfirmed={handleBulkDeleteConfirm}
         />
       )}
     </div>
