@@ -34,6 +34,18 @@ function UserModal({ user, onClose, onSaved }) {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState(null)
+  
+  // Fetch locations for the dropdown
+  const { data: locationsData } = useQuery({
+    queryKey: ['locations'],
+    queryFn: async () => {
+      const { locationsAPI } = await import('@/services/api')
+      const response = await locationsAPI.list()
+      return response.data || []
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+  const locations = locationsData || []
 
   const onSubmit = async (data) => {
     setLoading(true)
@@ -144,33 +156,38 @@ function UserModal({ user, onClose, onSaved }) {
           )}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Phone (SMS/Voice)</label>
+              <label className="label">Phone (SMS/Voice) (optional)</label>
               <input {...register('phone')} className="input" placeholder="+1 555 000 0000" />
             </div>
             <div>
-              <label className="label">WhatsApp</label>
-              <input {...register('whatsapp_number')} className="input" placeholder="+1 555 000 0000" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Department</label>
+              <label className="label">Department (optional)</label>
               <input {...register('department')} className="input" />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Title</label>
+              <label className="label">Title (optional)</label>
               <input {...register('title')} className="input" />
+            </div>
+            <div>
+              <label className="label">Employee ID (optional)</label>
+              <input {...register('employee_id')} className="input" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Employee ID</label>
-              <input {...register('employee_id')} className="input" />
-            </div>
-            <div>
-              <label className="label">Role</label>
+              <label className="label">Role (optional)</label>
               <select {...register('role')} className="select">
                 {ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Location (optional)</label>
+              <select {...register('location_id')} className="select">
+                <option value="">None</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
               </select>
             </div>
           </div>
