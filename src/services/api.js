@@ -126,6 +126,7 @@ export const usersAPI = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
+  bulkDelete: (user_ids) => api.post('/users/bulk-delete', { user_ids }),
   importCSV: (file) => {
     const form = new FormData()
     form.append('file', file)
