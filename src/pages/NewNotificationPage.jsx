@@ -417,7 +417,7 @@ function Step4({ form }) {
 
 // Step 5: Review
 function Step5({ form }) {
-  const v = form.getValues()
+  const v = form.watch()
   const type = INCIDENT_TYPES.find(t => t.value === v.incident_type)
   const channels = CHANNELS.filter(c => (v.channels || []).includes(c.value))
 
