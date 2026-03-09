@@ -52,8 +52,9 @@ export function NotificationsListPage() {
   })
 
   const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed', 'partially_sent']
-  const notifications = data?.items || []
-  const total = data?.total || 0
+  // Handle both array response and paginated response { items, total }
+  const notifications = Array.isArray(data) ? data : (data?.items || [])
+  const total = Array.isArray(data) ? data.length : (data?.total || 0)
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   const handlePageChange = (newPage) => {
