@@ -40,9 +40,21 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     const original = err.config
+    
+    // Skip refresh logic for auth endpoints (login, forgot-password, reset-password)
+    // These endpoints return 401 for invalid credentials, not expired tokens
+    const isAuthEndpoint = 
+      original.url?.includes('/auth/login') ||
+      original.url?.includes('/auth/forgot-password') ||
+      original.url?.includes('/auth/reset-password')
+    
+    if (isAuthEndpoint) {
+      return Promise.reject(err)
+    }
+    
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true
-      
+
       // If already refreshing, queue this request
       if (isRefreshing) {
         return new Promise((resolve) => {
@@ -59,24 +71,24 @@ api.interceptors.response.use(
           })
         })
       }
-      
+
       // Start refresh process
       isRefreshing = true
       const refreshToken = localStorage.getItem('refresh_token')
-      
+
       if (refreshToken) {
         try {
           const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
           const { access_token, refresh_token } = data
-          
+
           // Store new tokens
           localStorage.setItem('access_token', access_token)
           localStorage.setItem('refresh_token', refresh_token)
-          
+
           // Notify all queued requests
           onRefreshed(access_token, refresh_token)
           isRefreshing = false
-          
+
           // Retry original request
           original.headers.Authorization = `Bearer ${access_token}`
           return api(original)
