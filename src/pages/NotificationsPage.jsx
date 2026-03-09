@@ -21,7 +21,7 @@ export function NotificationsListPage() {
     refetchInterval: 15000,
   })
 
-  const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed']
+  const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed', 'partially_sent']
 
   return (
     <div className="space-y-5 animate-fade-in">
