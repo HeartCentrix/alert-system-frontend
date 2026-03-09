@@ -11,34 +11,43 @@ L.Icon.Default.mergeOptions({
 })
 
 // Custom blue pin icon
-const createIcon = (count) => L.divIcon({
-  className: '',
-  html: `
-    <div style="
-      background: #1d4ed8;
-      border: 2px solid #60a5fa;
-      border-radius: 50% 50% 50% 0;
-      width: 32px;
-      height: 32px;
-      transform: rotate(-45deg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-    ">
-      <span style="
-        transform: rotate(45deg);
-        color: white;
-        font-size: 10px;
-        font-weight: 700;
-        line-height: 1;
-      ">${count > 99 ? '99+' : count}</span>
-    </div>
-  `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -34],
-})
+// Sanitize count to prevent XSS - only allow safe numeric values
+const createIcon = (count) => {
+  // Ensure count is a safe non-negative integer
+  const safeCount = typeof count === 'number' && Number.isFinite(count) && count >= 0
+    ? Math.floor(count)
+    : 0
+  const displayCount = safeCount > 99 ? '99+' : String(safeCount)
+  
+  return L.divIcon({
+    className: '',
+    html: `
+      <div style="
+        background: #1d4ed8;
+        border: 2px solid #60a5fa;
+        border-radius: 50% 50% 50% 0;
+        width: 32px;
+        height: 32px;
+        transform: rotate(-45deg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      ">
+        <span style="
+          transform: rotate(45deg);
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1;
+        ">${displayCount}</span>
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -34],
+  })
+}
 
 // Auto-fit map bounds to markers
 function FitBounds({ locations }) {

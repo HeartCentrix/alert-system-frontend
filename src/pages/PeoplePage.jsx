@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Upload, Edit2, Trash2, UserCheck, UserX, ChevronLeft, ChevronRight, Eye, EyeOff, CheckSquare, Square, AlertTriangle } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -27,26 +27,66 @@ function generateTempPassword() {
   return password.split('').sort(() => Math.random() - 0.5).join('')
 }
 
+// Clean form data by converting empty strings to null and removing empty location_id
+function cleanUserData(data) {
+  const cleaned = { ...data }
+  
+  // Convert empty strings to null for optional fields
+  const optionalFields = ['phone', 'department', 'title', 'employee_id']
+  optionalFields.forEach(field => {
+    if (cleaned[field] === '' || cleaned[field] === null || cleaned[field] === undefined) {
+      delete cleaned[field]
+    }
+  })
+  
+  // Handle location_id - convert empty string to undefined (omit from request)
+  if (cleaned.location_id === '' || cleaned.location_id === null || cleaned.location_id === undefined) {
+    delete cleaned.location_id
+  }
+  
+  return cleaned
+}
+
 function UserModal({ user, onClose, onSaved }) {
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
   })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState(null)
 
+  // Reset form when user prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset(user || { role: 'viewer', preferred_channels: ['sms', 'email'] })
+  }, [user, reset])
+  
+  // Fetch locations for the dropdown
+  const { data: locationsData } = useQuery({
+    queryKey: ['locations'],
+    queryFn: async () => {
+      const { locationsAPI } = await import('@/services/api')
+      const response = await locationsAPI.list()
+      return response.data || []
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+  const locations = locationsData || []
+
   const onSubmit = async (data) => {
     setLoading(true)
     try {
+      // Clean the data to remove empty strings
+      const cleanedData = cleanUserData(data)
+      
       if (user?.id) {
-        await usersAPI.update(user.id, data)
+        await usersAPI.update(user.id, cleanedData)
         toast.success('User updated')
         onSaved()
         onClose()
       } else {
         // Generate secure password if not provided
         const password = data.password || generateTempPassword()
-        await usersAPI.create({ ...data, password })
+        await usersAPI.create({ ...cleanedData, password })
 
         // Show generated password if it was auto-generated
         if (!data.password) {
@@ -144,29 +184,38 @@ function UserModal({ user, onClose, onSaved }) {
           )}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Phone (SMS/Voice)</label>
+              <label className="label">Phone (SMS/Voice) (optional)</label>
               <input {...register('phone')} className="input" placeholder="+1 555 000 0000" />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Department</label>
+              <label className="label">Department (optional)</label>
               <input {...register('department')} className="input" />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Title</label>
+              <label className="label">Title (optional)</label>
               <input {...register('title')} className="input" />
+            </div>
+            <div>
+              <label className="label">Employee ID (optional)</label>
+              <input {...register('employee_id')} className="input" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Employee ID</label>
-              <input {...register('employee_id')} className="input" />
+              <label className="label">Role (optional)</label>
+              <select {...register('role')} className="select">
+                {ROLES.map(r => <option key={r} value={r}>{r.replaceAll('_', ' ')}</option>)}
+              </select>
             </div>
             <div>
-              <label className="label">Role</label>
-              <select {...register('role')} className="select">
-                {ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+              <label className="label">Location (optional)</label>
+              <select {...register('location_id')} className="select">
+                <option value="">None</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -237,7 +286,7 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
                     u.role === 'super_admin' ? 'badge-red' :
                     u.role === 'admin' ? 'badge-orange' :
                     u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                  )}>{u.role?.replace('_', ' ')}</span>
+                  )}>{u.role?.replaceAll('_', ' ')}</span>
                 </div>
               ))}
             </div>
@@ -282,12 +331,22 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
 export default function PeoplePage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null) // null | 'create' | user object
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false)
   const [selectedUsers, setSelectedUsers] = useState(new Set())
   const fileRef = useRef()
   const [importing, setImporting] = useState(false)
+
+  // Debounce search input to avoid excessive API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1) // Reset to first page when search changes
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
   
   const currentUser = useAuthStore(state => state.user)
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
@@ -299,17 +358,17 @@ export default function PeoplePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => usersAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries(['users']); toast.success('User deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
     onError: (err) => toast.error(err.response?.data?.detail || 'Error'),
   })
 
   const bulkDeleteMutation = useMutation({
     mutationFn: (userIds) => usersAPI.bulkDelete(userIds),
     onSuccess: (data) => {
-      qc.invalidateQueries(['users'])
+      qc.invalidateQueries({ queryKey: ['users'] })
       setSelectedUsers(new Set())
       setBulkDeleteModal(false)
-      
+
       const { deleted, failed } = data.data
       if (deleted > 0) {
         toast.success(`Successfully deleted ${deleted} user${deleted !== 1 ? 's' : ''}`)
@@ -322,6 +381,9 @@ export default function PeoplePage() {
       toast.error(err.response?.data?.detail || 'Error deleting users')
     },
   })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
+  const isBulkDeleting = bulkDeleteMutation.isPending
 
   const handleImport = async (e) => {
     const file = e.target.files[0]
@@ -349,7 +411,7 @@ export default function PeoplePage() {
         }
       }
 
-      qc.invalidateQueries(['users'])
+      qc.invalidateQueries({ queryKey: ['users'] })
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Import failed')
     } finally {
@@ -428,8 +490,8 @@ export default function PeoplePage() {
         <div className="relative w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             className="input pl-9"
             placeholder="Search name, email, department..."
           />
@@ -442,9 +504,22 @@ export default function PeoplePage() {
             </span>
             <button
               onClick={handleBulkDelete}
-              className="btn-danger text-sm"
+              disabled={isBulkDeleting}
+              className="btn-danger text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Trash2 size={14} /> Delete Selected
+              {isBulkDeleting ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={14} /> Delete Selected
+                </>
+              )}
             </button>
           </div>
         )}
@@ -528,7 +603,7 @@ export default function PeoplePage() {
                       u.role === 'super_admin' ? 'badge-red' :
                       u.role === 'admin' ? 'badge-orange' :
                       u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                    )}>{u.role?.replace('_', ' ')}</span>
+                    )}>{u.role?.replaceAll('_', ' ')}</span>
                   </td>
                   <td className="px-5 py-3.5">
                     <span className={u.is_active ? 'badge-green' : 'badge-red'}>
@@ -540,6 +615,7 @@ export default function PeoplePage() {
                       <button
                         onClick={() => setModal(u)}
                         className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+                        disabled={isDeleting(u.id)}
                       >
                         <Edit2 size={14} />
                       </button>
@@ -547,16 +623,23 @@ export default function PeoplePage() {
                         onClick={() => {
                           if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id)
                         }}
-                        disabled={isSelf}
+                        disabled={isSelf || isDeleting(u.id)}
                         className={cn(
                           "p-1.5 transition-colors",
-                          isSelf 
-                            ? "text-slate-700 cursor-not-allowed" 
+                          isSelf || isDeleting(u.id)
+                            ? "text-slate-700 cursor-not-allowed"
                             : "text-slate-500 hover:text-danger-400"
                         )}
-                        title={isSelf ? "You cannot delete yourself" : "Delete"}
+                        title={isSelf ? "You cannot delete yourself" : isDeleting(u.id) ? "Deleting..." : "Delete"}
                       >
-                        <Trash2 size={14} />
+                        {isDeleting(u.id) ? (
+                          <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
                       </button>
                     </div>
                   </td>
@@ -589,7 +672,7 @@ export default function PeoplePage() {
         <UserModal
           user={modal === 'create' ? null : modal}
           onClose={() => setModal(null)}
-          onSaved={() => qc.invalidateQueries(['users'])}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['users'] })}
         />
       )}
 

@@ -47,6 +47,10 @@ const useAuthStore = create((set, get) => ({
     localStorage.removeItem('refresh_token')
     set({ user: null, isAuthenticated: false })
   },
+
+  updateUser: (updatedUser) => {
+    set({ user: updatedUser })
+  },
 }))
 
 export default useAuthStore

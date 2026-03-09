@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { User, Lock, Bell, Shield, CheckCircle } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { User, Lock, Bell, Shield, CheckCircle, Edit2 } from 'lucide-react'
 import useAuthStore from '@/store/authStore'
-import { authAPI } from '@/services/api'
+import { authAPI, locationsAPI } from '@/services/api'
 import { cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
+import { useQueryClient } from '@tanstack/react-query'
 
 export default function SettingsPage() {
   const { user } = useAuthStore()
@@ -53,9 +55,200 @@ export default function SettingsPage() {
 }
 
 function ProfileTab({ user }) {
+  const qc = useQueryClient()
+  const { updateUser } = useAuthStore()
+  const [isEditing, setIsEditing] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    defaultValues: {
+      first_name: user?.first_name || '',
+      last_name: user?.last_name || '',
+      phone: user?.phone || '',
+      department: user?.department || '',
+      title: user?.title || '',
+      location_id: user?.location_id || '',
+      preferred_channels: user?.preferred_channels || ['sms', 'email'],
+    }
+  })
+
+  // Reset form when user prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset({
+      first_name: user?.first_name || '',
+      last_name: user?.last_name || '',
+      phone: user?.phone || '',
+      department: user?.department || '',
+      title: user?.title || '',
+      location_id: user?.location_id || '',
+      preferred_channels: user?.preferred_channels || ['sms', 'email'],
+    })
+  }, [user, reset])
+
+  // Fetch locations for the dropdown
+  const { data: locationsData } = useQuery({
+    queryKey: ['locations'],
+    queryFn: async () => {
+      const response = await locationsAPI.list()
+      return response.data || []
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+  const locations = Array.isArray(locationsData) ? locationsData : []
+
+  // Clean form data by converting empty strings to undefined
+  const cleanUserData = (data) => {
+    const cleaned = { ...data }
+    const optionalFields = ['phone', 'department', 'title']
+    optionalFields.forEach(field => {
+      if (cleaned[field] === '' || cleaned[field] === null || cleaned[field] === undefined) {
+        delete cleaned[field]
+      }
+    })
+    if (cleaned.location_id === '' || cleaned.location_id === null || cleaned.location_id === undefined) {
+      delete cleaned.location_id
+    }
+    return cleaned
+  }
+
+  const onSubmit = async (data) => {
+    setLoading(true)
+    try {
+      const cleanedData = cleanUserData(data)
+      const { data: updatedUser } = await authAPI.updateProfile(cleanedData)
+      updateUser(updatedUser)
+      qc.setQueryData(['auth', 'me'], updatedUser)
+      toast.success('Profile updated successfully')
+      setIsEditing(false)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update profile')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancel = () => {
+    setValue('first_name', user?.first_name || '')
+    setValue('last_name', user?.last_name || '')
+    setValue('phone', user?.phone || '')
+    setValue('department', user?.department || '')
+    setValue('title', user?.title || '')
+    setValue('location_id', user?.location_id || '')
+    setValue('preferred_channels', user?.preferred_channels || ['sms', 'email'])
+    setIsEditing(false)
+  }
+
+  const toggleChannel = (channel) => {
+    const current = watch('preferred_channels')
+    const updated = current.includes(channel)
+      ? current.filter(c => c !== channel)
+      : [...current, channel]
+    if (updated.length === 0) {
+      toast.error('At least one notification channel is required')
+      return
+    }
+    setValue('preferred_channels', updated)
+  }
+
+  if (isEditing) {
+    return (
+      <div className="card p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display font-semibold text-white">Edit Profile</h2>
+          <button onClick={handleCancel} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">First Name</label>
+            <input {...register('first_name')} className="input" />
+          </div>
+          <div>
+            <label className="label">Last Name</label>
+            <input {...register('last_name')} className="input" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Phone</label>
+            <input {...register('phone')} className="input" placeholder="+1 555 000 0000" />
+          </div>
+          <div>
+            <label className="label">Department</label>
+            <input {...register('department')} className="input" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Title</label>
+            <input {...register('title')} className="input" />
+          </div>
+          <div>
+            <label className="label">Location</label>
+            <select {...register('location_id')} className="select">
+              <option value="">None</option>
+              {locations.map(loc => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="label mb-2">Notification Preferences</label>
+          <div className="flex gap-2">
+            {['sms', 'email', 'voice'].map(channel => {
+              const isActive = watch('preferred_channels')?.includes(channel)
+              return (
+                <button
+                  key={channel}
+                  type="button"
+                  onClick={() => toggleChannel(channel)}
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-all border',
+                    isActive
+                      ? 'bg-primary-600 border-primary-500 text-white'
+                      : 'bg-surface-800 border-surface-700 text-slate-400 hover:text-slate-200'
+                  )}
+                >
+                  {channel.charAt(0).toUpperCase() + channel.slice(1)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={handleSubmit(onSubmit)}
+            disabled={loading}
+            className="btn-primary flex-1 justify-center"
+          >
+            {loading ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button type="button" onClick={handleCancel} className="btn-outline">
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="card p-6 space-y-5">
-      <h2 className="font-display font-semibold text-white">Profile Information</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="font-display font-semibold text-white">Profile Information</h2>
+        <button
+          onClick={() => setIsEditing(true)}
+          className="p-2 text-slate-500 hover:text-slate-300 transition-colors"
+          title="Edit profile"
+        >
+          <Edit2 size={16} />
+        </button>
+      </div>
 
       {/* Avatar */}
       <div className="flex items-center gap-4">
@@ -71,7 +264,7 @@ function ProfileTab({ user }) {
             user?.role === 'admin' ? 'badge-orange' :
             user?.role === 'manager' ? 'badge-blue' : 'badge-gray'
           )}>
-            {user?.role?.replace('_', ' ')}
+            {user?.role?.replaceAll('_', ' ')}
           </span>
         </div>
       </div>
@@ -96,7 +289,7 @@ function ProfileTab({ user }) {
       </div>
 
       <p className="text-xs text-slate-500 pt-2">
-        To update your profile information, contact your system administrator.
+        Click the edit icon to update your profile information. Note: Email and Employee ID cannot be changed.
       </p>
     </div>
   )
@@ -108,10 +301,6 @@ function PasswordTab() {
   const [success, setSuccess] = useState(false)
 
   const onSubmit = async (data) => {
-    if (data.new_password !== data.confirm_password) {
-      toast.error('New passwords do not match')
-      return
-    }
     setLoading(true)
     try {
       await authAPI.changePassword(data.current_password, data.new_password)
@@ -168,11 +357,17 @@ function PasswordTab() {
         <div>
           <label className="label">Confirm New Password</label>
           <input
-            {...register('confirm_password', { required: 'Required' })}
+            {...register('confirm_password', {
+              required: 'Required',
+              validate: value => value === watch('new_password') || 'Passwords do not match'
+            })}
             type="password"
             className="input"
             autoComplete="new-password"
           />
+          {errors.confirm_password && (
+            <p className="text-xs text-danger-400 mt-1">{errors.confirm_password.message}</p>
+          )}
         </div>
         <button type="submit" disabled={loading} className="btn-primary">
           {loading ? 'Changing...' : 'Change Password'}
@@ -234,7 +429,7 @@ function PreferencesTab({ user }) {
       </div>
 
       <p className="text-xs text-slate-500 mt-4">
-        To change your notification preferences, contact your administrator.
+        To change your notification preferences, please go to my profile page.
       </p>
     </div>
   )
