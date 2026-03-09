@@ -8,6 +8,27 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
 const PAGE_SIZE = 20
 
+// Helper function to mask PII data
+function maskPII(address) {
+  if (!address) return '—'
+  
+  // Check if it's an email (contains @)
+  if (address.includes('@')) {
+    const [local, domain] = address.split('@')
+    if (local.length <= 2) {
+      return `${local[0]}**@${domain}`
+    }
+    return `${local[0]}${'*'.repeat(Math.min(local.length - 1, 3))}${local.slice(-1)}@${domain}`
+  }
+  
+  // Phone number - show last 4 digits
+  const digits = address.replace(/\D/g, '')
+  if (digits.length >= 4) {
+    return `***-***-${digits.slice(-4)}`
+  }
+  return '***-***-****'
+}
+
 export function NotificationsListPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -275,7 +296,7 @@ export function NotificationDetailPage() {
                           log.status === 'failed' ? 'badge-red' : 'badge-gray'
                         )}>{log.status}</span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-500 font-mono">{log.to_address}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500 font-mono">{maskPII(log.to_address)}</td>
                     </tr>
                   ))}
                   {!delivery?.length && (
