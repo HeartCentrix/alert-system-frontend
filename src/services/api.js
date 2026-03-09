@@ -29,6 +29,13 @@ function onRefreshFailed() {
   refreshSubscribers = []
 }
 
+// Clear only auth-related items from localStorage (not all origin data)
+function clearAuthData() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user')
+}
+
 // Attach token on every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
@@ -65,7 +72,7 @@ api.interceptors.response.use(
               resolve(api(original))
             } else {
               // Refresh failed - logout
-              localStorage.clear()
+              clearAuthData()
               window.location.href = '/#/login'
               resolve(Promise.reject(err))
             }
@@ -97,7 +104,7 @@ api.interceptors.response.use(
           // Refresh failed - logout
           onRefreshFailed()
           isRefreshing = false
-          localStorage.clear()
+          clearAuthData()
           window.location.href = '/#/login'
           return Promise.reject(refreshErr)
         }
@@ -105,7 +112,7 @@ api.interceptors.response.use(
         // No refresh token - logout immediately
         onRefreshFailed()
         isRefreshing = false
-        localStorage.clear()
+        clearAuthData()
         window.location.href = '/#/login'
         return Promise.reject(err)
       }
