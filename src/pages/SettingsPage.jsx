@@ -429,7 +429,7 @@ function PreferencesTab({ user }) {
       </div>
 
       <p className="text-xs text-slate-500 mt-4">
-        To change your notification preferences, contact your administrator.
+        To change your notification preferences, please go to my profile page.
       </p>
     </div>
   )
