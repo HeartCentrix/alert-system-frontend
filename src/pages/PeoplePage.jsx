@@ -331,12 +331,22 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
 export default function PeoplePage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null) // null | 'create' | user object
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false)
   const [selectedUsers, setSelectedUsers] = useState(new Set())
   const fileRef = useRef()
   const [importing, setImporting] = useState(false)
+
+  // Debounce search input to avoid excessive API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1) // Reset to first page when search changes
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
   
   const currentUser = useAuthStore(state => state.user)
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
@@ -477,8 +487,8 @@ export default function PeoplePage() {
         <div className="relative w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             className="input pl-9"
             placeholder="Search name, email, department..."
           />
