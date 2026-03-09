@@ -147,10 +147,6 @@ function UserModal({ user, onClose, onSaved }) {
               <label className="label">Phone (SMS/Voice)</label>
               <input {...register('phone')} className="input" placeholder="+1 555 000 0000" />
             </div>
-            <div>
-              <label className="label">WhatsApp</label>
-              <input {...register('whatsapp_number')} className="input" placeholder="+1 555 000 0000" />
-            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

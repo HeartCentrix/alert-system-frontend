@@ -25,11 +25,11 @@ export const severityColor = (severity) => ({
 }[severity] || 'badge-gray')
 
 export const channelIcon = (channel) => ({
-  sms: '💬', email: '📧', voice: '📞', whatsapp: '💚', slack: '🔷', teams: '🟦'
+  sms: '💬', email: '📧', voice: '📞', slack: '🔷', teams: '🟦'
 }[channel] || '📡')
 
 export const channelLabel = (channel) => ({
-  sms: 'SMS', email: 'Email', voice: 'Voice', whatsapp: 'WhatsApp', slack: 'Slack', teams: 'Teams'
+  sms: 'SMS', email: 'Email', voice: 'Voice', slack: 'Slack', teams: 'Teams'
 }[channel] || channel)
 
 export const responseColor = (type) => ({
@@ -54,7 +54,6 @@ export const CHANNELS = [
   { value: 'sms', label: 'SMS', icon: '💬', desc: 'Text message to mobile' },
   { value: 'email', label: 'Email', icon: '📧', desc: 'Email to inbox' },
   { value: 'voice', label: 'Voice Call', icon: '📞', desc: 'Automated phone call' },
-  { value: 'whatsapp', label: 'WhatsApp', icon: '💚', desc: 'WhatsApp message' },
   { value: 'slack', label: 'Slack', icon: '🔷', desc: 'Post to Slack channel' },
   { value: 'teams', label: 'Teams', icon: '🟦', desc: 'Post to Teams channel' },
 ]

@@ -198,7 +198,6 @@ function PreferencesTab({ user }) {
     { value: 'sms', label: 'SMS', icon: '💬', desc: 'Text message to your phone' },
     { value: 'email', label: 'Email', icon: '📧', desc: 'Email to your inbox' },
     { value: 'voice', label: 'Voice Call', icon: '📞', desc: 'Automated phone call' },
-    { value: 'whatsapp', label: 'WhatsApp', icon: '💚', desc: 'WhatsApp message' },
   ]
 
   return (
