@@ -73,7 +73,9 @@ export default function LoginPage() {
     if (lockoutExpiry && Date.now() < lockoutExpiry) return // Block requests during cooldown
     setLoading(true)
     try {
+      console.log('[Login] Attempting login for:', email)
       await login(email, password)
+      console.log('[Login] Login successful')
       toast.success('Welcome back')
       setLockoutExpiry(null)
       setCountdown(null)
