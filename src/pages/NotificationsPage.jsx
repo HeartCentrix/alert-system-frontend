@@ -15,10 +15,12 @@ export function NotificationsListPage() {
   // (same route = no remount = useState initializer never re-runs).
   const status = searchParams.get('status') || ''
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['notifications', status],
     queryFn: () => notificationsAPI.list({ status: status || undefined }).then(r => r.data),
-    refetchInterval: 15000,
+    refetchInterval: 5000, // Refetch every 5 seconds
+    refetchIntervalInBackground: true, // Refetch even when tab is not focused
+    staleTime: 0, // Data is always considered stale
   })
 
   const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed', 'partially_sent']
@@ -115,18 +117,24 @@ export function NotificationDetailPage() {
     queryKey: ['notification', id],
     queryFn: () => notificationsAPI.get(id).then(r => r.data),
     refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   })
 
   const { data: delivery } = useQuery({
     queryKey: ['delivery', id],
     queryFn: () => notificationsAPI.delivery(id).then(r => r.data),
     refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   })
 
   const { data: responses } = useQuery({
     queryKey: ['responses', id],
     queryFn: () => notificationsAPI.responses(id).then(r => r.data),
     refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   })
 
   const handleCancel = async () => {
