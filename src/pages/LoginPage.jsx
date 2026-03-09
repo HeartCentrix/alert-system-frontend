@@ -6,7 +6,7 @@ import useAuthStore from '@/store/authStore'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
-  const { login } = useAuthStore()
+  const { login, isAuthenticated } = useAuthStore()
   const navigate = useNavigate()
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -17,6 +17,13 @@ export default function LoginPage() {
   })
   const [countdown, setCountdown] = useState(null)
   const { register, handleSubmit, formState: { errors } } = useForm()
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
 
   // Persist lockoutExpiry to localStorage
   useEffect(() => {
