@@ -1,34 +1,81 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Bell, Send, XCircle, ChevronRight, Users, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { Bell, Send, XCircle, ChevronRight, ChevronLeft, Users, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
 import { notificationsAPI } from '@/services/api'
 import { timeAgo, statusColor, channelIcon, channelLabel, responseColor, cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
+
+const PAGE_SIZE = 20
+
+// Helper function to mask PII data
+function maskPII(address) {
+  if (!address) return '—'
+  
+  // Check if it's an email (contains @)
+  if (address.includes('@')) {
+    const [local, domain] = address.split('@')
+    if (local.length <= 2) {
+      return `${local[0]}**@${domain}`
+    }
+    return `${local[0]}${'*'.repeat(Math.min(local.length - 1, 3))}${local.slice(-1)}@${domain}`
+  }
+  
+  // Phone number - show last 4 digits
+  const digits = address.replace(/\D/g, '')
+  if (digits.length >= 4) {
+    return `***-***-${digits.slice(-4)}`
+  }
+  return '***-***-****'
+}
 
 export function NotificationsListPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const isVisible = useIsDocumentVisible()
   // Derive the active filter directly from the URL — this is the single source
   // of truth. Using useState would only capture the initial value on mount and
   // would NOT update when the sidebar navigates to a different query string
   // (same route = no remount = useState initializer never re-runs).
   const status = searchParams.get('status') || ''
+  const page = parseInt(searchParams.get('page') || '1')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['notifications', status],
-    queryFn: () => notificationsAPI.list({ status: status || undefined }).then(r => r.data),
-    refetchInterval: 15000,
+    queryKey: ['notifications', status, page],
+    queryFn: () => notificationsAPI.list({
+      status: status || undefined,
+      page,
+      page_size: PAGE_SIZE
+    }).then(r => r.data),
+    refetchInterval: isVisible ? 15000 : false,
   })
 
   const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed']
+  const notifications = data?.items || []
+  const total = data?.total || 0
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  const handlePageChange = (newPage) => {
+    const params = new URLSearchParams(searchParams)
+    if (newPage > 1) {
+      params.set('page', newPage.toString())
+    } else {
+      params.delete('page')
+    }
+    setSearchParams(params)
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Notifications</h1>
-          <p className="text-slate-500 text-sm">All sent and scheduled notifications</p>
+          <p className="text-slate-500 text-sm">
+            {total > 0 
+              ? `${total} notification${total !== 1 ? 's' : ''}`
+              : 'All sent and scheduled notifications'}
+          </p>
         </div>
         <button onClick={() => navigate('/notifications/new')} className="btn-primary">
           <Bell size={14} /> + New Notification
@@ -40,7 +87,11 @@ export function NotificationsListPage() {
         {statuses.map(s => (
           <button
             key={s}
-            onClick={() => s ? setSearchParams({ status: s }) : setSearchParams({})}
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (s) params.set('status', s)
+              setSearchParams(params)
+            }}
             className={cn(
               'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
               status === s ? 'bg-surface-700 text-white' : 'text-slate-500 hover:text-slate-300'
@@ -67,10 +118,10 @@ export function NotificationsListPage() {
             {isLoading && (
               <tr><td colSpan={6} className="text-center py-12 text-slate-500">Loading...</td></tr>
             )}
-            {!isLoading && !data?.length && (
+            {!isLoading && notifications.length === 0 && (
               <tr><td colSpan={6} className="text-center py-12 text-slate-500 text-sm">No notifications found</td></tr>
             )}
-            {data?.map(n => (
+            {notifications.map(n => (
               <tr
                 key={n.id}
                 className="table-row cursor-pointer"
@@ -102,6 +153,47 @@ export function NotificationsListPage() {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-5 py-3 border-t border-surface-700/40 flex items-center justify-between">
+            <div className="text-xs text-slate-500">
+              Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, total)} of {total} results
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page === 1}
+                className="btn-ghost py-1.5 px-3 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={14} /> Previous
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => handlePageChange(p)}
+                    className={cn(
+                      'w-8 h-8 rounded-md text-xs font-medium transition-all',
+                      page === p 
+                        ? 'bg-surface-700 text-white' 
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-surface-800'
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page === totalPages}
+                className="btn-ghost py-1.5 px-3 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -110,23 +202,24 @@ export function NotificationsListPage() {
 export function NotificationDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const isVisible = useIsDocumentVisible()
 
   const { data: notification, refetch } = useQuery({
     queryKey: ['notification', id],
     queryFn: () => notificationsAPI.get(id).then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: isVisible ? 5000 : false,
   })
 
   const { data: delivery } = useQuery({
     queryKey: ['delivery', id],
     queryFn: () => notificationsAPI.delivery(id).then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: isVisible ? 5000 : false,
   })
 
   const { data: responses } = useQuery({
     queryKey: ['responses', id],
     queryFn: () => notificationsAPI.responses(id).then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: isVisible ? 5000 : false,
   })
 
   const handleCancel = async () => {
@@ -206,7 +299,7 @@ export function NotificationDetailPage() {
                           log.status === 'failed' ? 'badge-red' : 'badge-gray'
                         )}>{log.status}</span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-500 font-mono">{log.to_address}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500 font-mono">{maskPII(log.to_address)}</td>
                     </tr>
                   ))}
                   {!delivery?.length && (
@@ -283,7 +376,7 @@ export function NotificationDetailPage() {
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {responses.map(r => (
                   <div key={r.id} className="flex items-center gap-2 text-sm">
-                    <span className={responseColor(r.response_type)}>{r.response_type.replace('_', ' ')}</span>
+                    <span className={responseColor(r.response_type)}>{r.response_type.replaceAll('_', ' ')}</span>
                     <span className="text-slate-400 truncate">{r.user_name}</span>
                     <span className="text-xs text-slate-600 ml-auto">{timeAgo(r.responded_at)}</span>
                   </div>

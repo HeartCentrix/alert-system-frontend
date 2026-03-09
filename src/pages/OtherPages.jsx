@@ -8,12 +8,18 @@ import toast from 'react-hot-toast'
 import LocationAutocompleteInput from '@/components/LocationAutocompleteInput'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
 function GroupModal({ group, onClose, onSaved }) {
-  const { register, handleSubmit } = useForm({ defaultValues: group || { type: 'static' } })
+  const { register, handleSubmit, reset } = useForm({ defaultValues: group || { type: 'static' } })
   const [loading, setLoading] = useState(false)
+
+  // Reset form when group prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset(group || { type: 'static' })
+  }, [group, reset])
   const onSubmit = async (data) => {
     setLoading(true)
     try {
@@ -276,17 +282,23 @@ export function GroupsPage() {
   const isAdminOrAbove = ['admin', 'super_admin'].includes(currentUser?.role)
 
   // Fetch all groups list - called every time user navigates to Groups page
-  const { data: groups = [], isLoading } = useQuery({
+  const { data: groupsData, isLoading } = useQuery({
     queryKey: ['groups'],
     queryFn: () => groupsAPI.list().then(r => r.data),
     refetchOnMount: 'always',
     staleTime: 0,
   })
+  const groups = groupsData || []
 
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries(['groups']); toast.success('Group deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); toast.success('Group deleted') },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete group')
+    },
   })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
   
   // Check if user can manage members for a specific group
   // Manager: can only manage groups they are a member of
@@ -349,8 +361,32 @@ export function GroupsPage() {
                           <UserPlus size={14} />
                         </button>
                       )}
-                      <button onClick={() => setModal(g)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={14} /></button>
-                      <button onClick={() => confirm('Delete group?') && deleteMutation.mutate(g.id)} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={14} /></button>
+                      <button
+                        onClick={() => setModal(g)}
+                        className="p-1.5 text-slate-500 hover:text-slate-300"
+                        disabled={isDeleting(g.id)}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => confirm('Delete group?') && deleteMutation.mutate(g.id)}
+                        disabled={isDeleting(g.id)}
+                        className={cn(
+                          "p-1.5 transition-colors",
+                          isDeleting(g.id)
+                            ? "text-slate-700 cursor-not-allowed"
+                            : "text-slate-500 hover:text-danger-400"
+                        )}
+                      >
+                        {isDeleting(g.id) ? (
+                          <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
                     </div>
                   </td>
                 )}
@@ -359,12 +395,12 @@ export function GroupsPage() {
           </tbody>
         </table>
       </div>
-      {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries(['groups'])} />}
+      {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries({ queryKey: ['groups'] })} />}
       {membersModal && (
         <GroupMembersModal
           group={membersModal}
           onClose={() => setMembersModal(null)}
-          onSaved={() => qc.invalidateQueries(['groups'])}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['groups'] })}
         />
       )}
     </div>
@@ -374,10 +410,15 @@ export function GroupsPage() {
 // ─── LOCATIONS ────────────────────────────────────────────────────────────────
 
 function LocationModal({ location, onClose, onSaved }) {
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     defaultValues: location || { country: 'USA', geofence_radius_miles: 1.0 }
   })
   const [loading, setLoading] = useState(false)
+
+  // Reset form when location prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset(location || { country: 'USA', geofence_radius_miles: 1.0 })
+  }, [location, reset])
 
   // Watch location name and coordinates for autocomplete
   const locationName = watch('name')
@@ -557,15 +598,22 @@ export function LocationsPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [modal, setModal] = useState(null)
-  const { data: locations = [], isLoading } = useQuery({
+  const isVisible = useIsDocumentVisible()
+  const { data: locationsData, isLoading } = useQuery({
     queryKey: ['locations'],
     queryFn: () => locationsAPI.list().then(r => r.data),
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
+  const locations = locationsData || []
   const deleteMutation = useMutation({
     mutationFn: (id) => locationsAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries(['locations']); toast.success('Location deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['locations'] }); toast.success('Location deleted') },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete location')
+    },
   })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -591,11 +639,36 @@ export function LocationsPage() {
                   onClick={() => navigate(`/locations/${loc.id}/members`)}
                   className="p-1.5 text-slate-500 hover:text-primary-400 hover:bg-surface-700 rounded"
                   title="Manage members"
+                  disabled={isDeleting(loc.id)}
                 >
                   <UserPlus size={14} />
                 </button>
-                <button onClick={() => setModal(loc)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={13} /></button>
-                <button onClick={() => confirm('Delete?') && deleteMutation.mutate(loc.id)} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
+                <button
+                  onClick={() => setModal(loc)}
+                  className="p-1.5 text-slate-500 hover:text-slate-300"
+                  disabled={isDeleting(loc.id)}
+                >
+                  <Edit2 size={13} />
+                </button>
+                <button
+                  onClick={() => confirm('Delete?') && deleteMutation.mutate(loc.id)}
+                  disabled={isDeleting(loc.id)}
+                  className={cn(
+                    "p-1.5 transition-colors",
+                    isDeleting(loc.id)
+                      ? "text-slate-700 cursor-not-allowed"
+                      : "text-slate-500 hover:text-danger-400"
+                  )}
+                >
+                  {isDeleting(loc.id) ? (
+                    <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <Trash2 size={13} />
+                  )}
+                </button>
               </div>
             </div>
             <h3 className="font-semibold text-slate-200 mb-0.5">{loc.name}</h3>
@@ -616,7 +689,7 @@ export function LocationsPage() {
           </div>
         ))}
       </div>
-      {modal && <LocationModal location={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries(['locations'])} />}
+      {modal && <LocationModal location={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries({ queryKey: ['locations'] })} />}
     </div>
   )
 }
@@ -626,20 +699,36 @@ export function LocationsPage() {
 export function TemplatesPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
-  const { data: templates = [], isLoading } = useQuery({
+  const { data: templatesData, isLoading } = useQuery({
     queryKey: ['templates'],
     queryFn: () => templatesAPI.list().then(r => r.data),
   })
+  const templates = templatesData || []
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => templatesAPI.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['templates'] }); toast.success('Template deleted') },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete template')
+    },
+  })
+
+  const isDeleting = (id) => deleteMutation.isPending && deleteMutation.variables === id
 
   function TemplateModal({ template, onClose }) {
-    const { register, handleSubmit } = useForm({ defaultValues: template || { channels: ['sms', 'email'] } })
+    const { register, handleSubmit, reset } = useForm({ defaultValues: template || { channels: ['sms', 'email'] } })
     const [loading, setLoading] = useState(false)
+
+    // Reset form when template prop changes (prevents stale values on re-mount)
+    useEffect(() => {
+      reset(template || { channels: ['sms', 'email'] })
+    }, [template, reset])
     const onSubmit = async (data) => {
       setLoading(true)
       try {
         template ? await templatesAPI.update(template.id, data) : await templatesAPI.create(data)
         toast.success('Template saved')
-        qc.invalidateQueries(['templates']); onClose()
+        qc.invalidateQueries({ queryKey: ['templates'] }); onClose()
       } catch { toast.error('Error') }
       finally { setLoading(false) }
     }
@@ -694,8 +783,32 @@ export function TemplatesPage() {
             <div className="flex items-start justify-between mb-2">
               <span className="badge-blue text-xs">{t.category || 'general'}</span>
               <div className="flex gap-1">
-                <button onClick={() => setModal(t)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={13} /></button>
-                <button onClick={() => confirm('Delete?') && templatesAPI.delete(t.id).then(() => { qc.invalidateQueries(['templates']); toast.success('Deleted') })} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={13} /></button>
+                <button
+                  onClick={() => setModal(t)}
+                  className="p-1.5 text-slate-500 hover:text-slate-300"
+                  disabled={isDeleting(t.id)}
+                >
+                  <Edit2 size={13} />
+                </button>
+                <button
+                  onClick={() => { if (confirm(`Delete template "${t.name}"? This action cannot be undone.`)) deleteMutation.mutate(t.id) }}
+                  disabled={isDeleting(t.id)}
+                  className={cn(
+                    "p-1.5 transition-colors",
+                    isDeleting(t.id)
+                      ? "text-slate-700 cursor-not-allowed"
+                      : "text-slate-500 hover:text-danger-400"
+                  )}
+                >
+                  {isDeleting(t.id) ? (
+                    <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <Trash2 size={13} />
+                  )}
+                </button>
               </div>
             </div>
             <h3 className="font-semibold text-slate-200 text-sm mb-1">{t.name}</h3>
@@ -713,21 +826,28 @@ export function TemplatesPage() {
 export function IncidentsPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
-  const { data: incidents = [], isLoading } = useQuery({
+  const isVisible = useIsDocumentVisible()
+  const { data: incidentsData, isLoading } = useQuery({
     queryKey: ['incidents'],
     queryFn: () => incidentsAPI.list().then(r => r.data),
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
+  const incidents = incidentsData || []
 
   function IncidentModal({ incident, onClose }) {
-    const { register, handleSubmit } = useForm({ defaultValues: incident || { severity: 'medium' } })
+    const { register, handleSubmit, reset } = useForm({ defaultValues: incident || { severity: 'medium' } })
     const [loading, setLoading] = useState(false)
+
+    // Reset form when incident prop changes (prevents stale values on re-mount)
+    useEffect(() => {
+      reset(incident || { severity: 'medium' })
+    }, [incident, reset])
     const onSubmit = async (data) => {
       setLoading(true)
       try {
         incident ? await incidentsAPI.update(incident.id, data) : await incidentsAPI.create(data)
         toast.success(incident ? 'Incident updated' : 'Incident created')
-        qc.invalidateQueries(['incidents']); onClose()
+        qc.invalidateQueries({ queryKey: ['incidents'] }); onClose()
       } catch { toast.error('Error') }
       finally { setLoading(false) }
     }

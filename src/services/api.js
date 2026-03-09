@@ -9,24 +9,14 @@ const api = axios.create({
 })
 
 // Mutex for token refresh - prevents concurrent refresh requests
-let isRefreshing = false
-let refreshSubscribers = []
+// Store the refresh promise to queue concurrent requests
+let refreshPromise = null
 
-// Subscribe to refresh event (queue callbacks)
-function subscribeTokenRefresh(cb) {
-  refreshSubscribers.push(cb)
-}
-
-// Execute all queued callbacks with new token
-function onRefreshed(access_token, refresh_token) {
-  refreshSubscribers.forEach(cb => cb(access_token, refresh_token))
-  refreshSubscribers = []
-}
-
-// Handle refresh failure - clear all queued callbacks
-function onRefreshFailed() {
-  refreshSubscribers.forEach(cb => cb(null, null))
-  refreshSubscribers = []
+// Clear only auth-related items from localStorage (not all origin data)
+function clearAuthData() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user')
 }
 
 // Attach token on every request
@@ -41,43 +31,43 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     const original = err.config
-    
+
     // Skip refresh logic for auth endpoints (login, forgot-password, reset-password)
     // These endpoints return 401 for invalid credentials, not expired tokens
-    const isAuthEndpoint = 
+    const isAuthEndpoint =
       original.url?.includes('/auth/login') ||
       original.url?.includes('/auth/forgot-password') ||
       original.url?.includes('/auth/reset-password')
-    
+
     if (isAuthEndpoint) {
       return Promise.reject(err)
     }
-    
+
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true
 
-      // If already refreshing, queue this request
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          subscribeTokenRefresh((access_token, refresh_token) => {
-            if (access_token) {
-              original.headers.Authorization = `Bearer ${access_token}`
-              resolve(api(original))
-            } else {
-              // Refresh failed - logout
-              localStorage.clear()
-              window.location.href = '/#/login'
-              resolve(Promise.reject(err))
-            }
-          })
-        })
+      // If refresh is in progress, wait for it to complete
+      if (refreshPromise) {
+        try {
+          const tokens = await refreshPromise
+          if (tokens) {
+            original.headers.Authorization = `Bearer ${tokens.access_token}`
+            return api(original)
+          }
+        } catch {
+          // Refresh failed - will redirect to login
+        }
+        return Promise.reject(err)
       }
 
-      // Start refresh process
-      isRefreshing = true
-      const refreshToken = localStorage.getItem('refresh_token')
+      // Start refresh process - create a promise that all concurrent requests can await
+      refreshPromise = (async () => {
+        const refreshToken = localStorage.getItem('refresh_token')
 
-      if (refreshToken) {
+        if (!refreshToken) {
+          throw new Error('No refresh token')
+        }
+
         try {
           const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
           const { access_token, refresh_token } = data
@@ -86,28 +76,26 @@ api.interceptors.response.use(
           localStorage.setItem('access_token', access_token)
           localStorage.setItem('refresh_token', refresh_token)
 
-          // Notify all queued requests
-          onRefreshed(access_token, refresh_token)
-          isRefreshing = false
-
-          // Retry original request
-          original.headers.Authorization = `Bearer ${access_token}`
-          return api(original)
+          return { access_token, refresh_token }
         } catch (refreshErr) {
-          // Refresh failed - logout
-          onRefreshFailed()
-          isRefreshing = false
-          localStorage.clear()
+          // Refresh failed - clear auth data and redirect
+          clearAuthData()
           window.location.href = '/#/login'
-          return Promise.reject(refreshErr)
+          throw refreshErr
+        } finally {
+          // Reset refresh promise so future requests can refresh again
+          refreshPromise = null
         }
-      } else {
-        // No refresh token - logout immediately
-        onRefreshFailed()
-        isRefreshing = false
-        localStorage.clear()
-        window.location.href = '/#/login'
-        return Promise.reject(err)
+      })()
+
+      try {
+        const tokens = await refreshPromise
+        if (tokens) {
+          original.headers.Authorization = `Bearer ${tokens.access_token}`
+          return api(original)
+        }
+      } catch (refreshErr) {
+        return Promise.reject(refreshErr)
       }
     }
     return Promise.reject(err)

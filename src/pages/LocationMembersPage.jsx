@@ -9,6 +9,7 @@ import {
 import { locationAudienceAPI, usersAPI, locationsAPI, authAPI } from '@/services/api'
 import toast from 'react-hot-toast'
 import LocationAudienceMap from '@/components/LocationAudienceMap'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 // Assignment type badge colors
 const assignmentTypeColors = {
@@ -392,6 +393,7 @@ export default function LocationMembersPage() {
   }
 
   // Fetch location members
+  const isVisible = useIsDocumentVisible()
   const { data: membersData, isLoading, refetch } = useQuery({
     queryKey: ['location-members', locationId, statusFilter, typeFilter],
     queryFn: () => {
@@ -406,7 +408,7 @@ export default function LocationMembersPage() {
         return { total: 0, items: [] }
       })
     },
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
 
   // Fetch location details

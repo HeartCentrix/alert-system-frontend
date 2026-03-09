@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { User, Lock, Bell, Shield, CheckCircle, Edit2 } from 'lucide-react'
@@ -59,8 +59,8 @@ function ProfileTab({ user }) {
   const { updateUser } = useAuthStore()
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
-  
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     defaultValues: {
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
@@ -71,6 +71,19 @@ function ProfileTab({ user }) {
       preferred_channels: user?.preferred_channels || ['sms', 'email'],
     }
   })
+
+  // Reset form when user prop changes (prevents stale values on re-mount)
+  useEffect(() => {
+    reset({
+      first_name: user?.first_name || '',
+      last_name: user?.last_name || '',
+      phone: user?.phone || '',
+      department: user?.department || '',
+      title: user?.title || '',
+      location_id: user?.location_id || '',
+      preferred_channels: user?.preferred_channels || ['sms', 'email'],
+    })
+  }, [user, reset])
 
   // Fetch locations for the dropdown
   const { data: locationsData } = useQuery({
@@ -251,7 +264,7 @@ function ProfileTab({ user }) {
             user?.role === 'admin' ? 'badge-orange' :
             user?.role === 'manager' ? 'badge-blue' : 'badge-gray'
           )}>
-            {user?.role?.replace('_', ' ')}
+            {user?.role?.replaceAll('_', ' ')}
           </span>
         </div>
       </div>
@@ -288,10 +301,6 @@ function PasswordTab() {
   const [success, setSuccess] = useState(false)
 
   const onSubmit = async (data) => {
-    if (data.new_password !== data.confirm_password) {
-      toast.error('New passwords do not match')
-      return
-    }
     setLoading(true)
     try {
       await authAPI.changePassword(data.current_password, data.new_password)
@@ -348,11 +357,17 @@ function PasswordTab() {
         <div>
           <label className="label">Confirm New Password</label>
           <input
-            {...register('confirm_password', { required: 'Required' })}
+            {...register('confirm_password', {
+              required: 'Required',
+              validate: value => value === watch('new_password') || 'Passwords do not match'
+            })}
             type="password"
             className="input"
             autoComplete="new-password"
           />
+          {errors.confirm_password && (
+            <p className="text-xs text-danger-400 mt-1">{errors.confirm_password.message}</p>
+          )}
         </div>
         <button type="submit" disabled={loading} className="btn-primary">
           {loading ? 'Changing...' : 'Change Password'}
@@ -414,7 +429,7 @@ function PreferencesTab({ user }) {
       </div>
 
       <p className="text-xs text-slate-500 mt-4">
-        To change your notification preferences, contact your administrator.
+        To change your notification preferences, please go to my profile page.
       </p>
     </div>
   )
