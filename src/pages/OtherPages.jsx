@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus, X, Search } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { groupsAPI, locationsAPI, templatesAPI, incidentsAPI, usersAPI } from '@/services/api'
@@ -274,11 +274,15 @@ export function GroupsPage() {
   const { user: currentUser } = useAuthStore()
   const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(currentUser?.role)
   const isAdminOrAbove = ['admin', 'super_admin'].includes(currentUser?.role)
-  
+
+  // Fetch all groups list - called every time user navigates to Groups page
   const { data: groups = [], isLoading } = useQuery({
     queryKey: ['groups'],
     queryFn: () => groupsAPI.list().then(r => r.data),
+    refetchOnMount: 'always',
+    staleTime: 0,
   })
+
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries(['groups']); toast.success('Group deleted') },
