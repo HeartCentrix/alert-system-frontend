@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Eye, EyeOff, Zap, AlertCircle } from 'lucide-react'
@@ -10,19 +10,89 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [lockoutExpiry, setLockoutExpiry] = useState(() => {
+    // Restore expiry timestamp from localStorage on mount
+    const saved = localStorage.getItem('login_lockout_expiry')
+    return saved ? parseInt(saved) : null
+  })
+  const [countdown, setCountdown] = useState(null)
   const { register, handleSubmit, formState: { errors } } = useForm()
 
+  // Persist lockoutExpiry to localStorage
+  useEffect(() => {
+    if (lockoutExpiry) {
+      localStorage.setItem('login_lockout_expiry', lockoutExpiry.toString())
+    } else {
+      localStorage.removeItem('login_lockout_expiry')
+    }
+  }, [lockoutExpiry])
+
+  // Countdown timer - calculates remaining time from expiry timestamp
+  useEffect(() => {
+    if (!lockoutExpiry) {
+      setCountdown(null)
+      return
+    }
+
+    const updateCountdown = () => {
+      const now = Date.now()
+      const remaining = Math.max(0, Math.floor((lockoutExpiry - now) / 1000))
+      
+      if (remaining <= 0) {
+        setLockoutExpiry(null)
+        setCountdown(null)
+        return
+      }
+      
+      setCountdown(remaining)
+    }
+
+    updateCountdown()
+    const timer = setInterval(updateCountdown, 1000)
+    return () => clearInterval(timer)
+  }, [lockoutExpiry])
+
+  // Format countdown display: seconds if < 60, minutes if >= 60, hours if >= 3600
+  const formatCountdown = (seconds) => {
+    if (!seconds) return null
+    if (seconds < 60) {
+      return `${seconds}s`
+    }
+    if (seconds < 3600) {
+      const mins = Math.floor(seconds / 60)
+      const secs = seconds % 60
+      return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`
+    }
+    // Hours
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
+  }
+
   const onSubmit = async ({ email, password }) => {
+    if (lockoutExpiry && Date.now() < lockoutExpiry) return // Block requests during cooldown
     setLoading(true)
     try {
       console.log('[Login] Attempting login for:', email)
       await login(email, password)
       console.log('[Login] Login successful')
       toast.success('Welcome back')
+      setLockoutExpiry(null)
+      setCountdown(null)
       navigate('/dashboard')
     } catch (err) {
-      console.error('[Login] Error:', err)
-      toast.error(err.response?.data?.detail || 'Invalid credentials')
+      // Extract error message and retry-after header
+      const message = err.response?.data?.detail || err.message || 'Invalid credentials'
+      const retryAfterSeconds = err.response?.headers?.['retry-after']
+
+      if (retryAfterSeconds) {
+        const seconds = parseInt(retryAfterSeconds)
+        // Store expiry timestamp so countdown continues correctly across navigation
+        setLockoutExpiry(Date.now() + (seconds * 1000))
+        toast.error(`${message}. Try again in ${formatCountdown(seconds)}.`)
+      } else {
+        toast.error(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -102,10 +172,18 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="btn-primary w-full justify-center py-2.5"
+              disabled={loading || countdown !== null}
+              className="btn-primary w-full justify-center py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {countdown !== null ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Try again in {formatCountdown(countdown)}
+                </span>
+              ) : loading ? (
                 <span className="flex items-center gap-2">
                   <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
