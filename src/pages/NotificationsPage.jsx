@@ -51,7 +51,7 @@ export function NotificationsListPage() {
     refetchInterval: isVisible ? 15000 : false,
   })
 
-  const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed']
+  const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed', 'partially_sent']
   const notifications = data?.items || []
   const total = data?.total || 0
   const totalPages = Math.ceil(total / PAGE_SIZE)
