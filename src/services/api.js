@@ -145,6 +145,8 @@ export const groupsAPI = {
   delete: (id) => api.delete(`/groups/${id}`),
   addMembers: (id, user_ids) => api.post(`/groups/${id}/members`, { user_ids }),
   removeMember: (groupId, userId) => api.delete(`/groups/${groupId}/members/${userId}`),
+  preview: (data) => api.post('/groups/preview', data),
+  getFilterOptions: () => api.get('/groups/filters/options'),
 }
 
 // ─── LOCATIONS ────────────────────────────────────────────────────────────────

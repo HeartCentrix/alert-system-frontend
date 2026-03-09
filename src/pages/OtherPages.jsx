@@ -13,25 +13,91 @@ import { useIsDocumentVisible } from '@/hooks/useVisibility'
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
 function GroupModal({ group, onClose, onSaved }) {
-  const { register, handleSubmit, reset } = useForm({ defaultValues: group || { type: 'static' } })
+  const { register, handleSubmit, reset, watch, setValue } = useForm({ 
+    defaultValues: group || { type: 'static', dynamic_filter: {} } 
+  })
   const [loading, setLoading] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewData, setPreviewData] = useState(null)
+  const [filterOptions, setFilterOptions] = useState({ departments: [], titles: [], roles: [] })
+  
+  const type = watch('type')
+  const dynamicFilter = watch('dynamic_filter')
+
+  // Fetch filter options for dynamic groups
+  const { data: optionsData } = useQuery({
+    queryKey: ['group-filter-options'],
+    queryFn: () => groupsAPI.getFilterOptions().then(r => r.data),
+    enabled: type === 'dynamic',
+    staleTime: 5 * 60 * 1000,
+  })
 
   // Reset form when group prop changes (prevents stale values on re-mount)
   useEffect(() => {
-    reset(group || { type: 'static' })
+    reset(group || { type: 'static', dynamic_filter: {} })
+    setPreviewData(null)
   }, [group, reset])
+
+  // Update filter options when data is fetched
+  useEffect(() => {
+    if (optionsData) {
+      setFilterOptions(optionsData)
+    }
+  }, [optionsData])
+
+  // Preview dynamic group members
+  const handlePreview = async () => {
+    const filter = dynamicFilter || {}
+    if (!filter.department && !filter.title && !filter.role && !filter.location_id) {
+      toast.error('Please select at least one filter criteria')
+      return
+    }
+    
+    setPreviewLoading(true)
+    try {
+      const response = await groupsAPI.preview({
+        name: watch('name') || 'Preview',
+        type: 'dynamic',
+        dynamic_filter: filter
+      })
+      setPreviewData(response.data)
+      toast.success(`Found ${response.data.member_count} matching users`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error previewing group')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  // Set dynamic filter value
+  const updateDynamicFilter = (field, value) => {
+    const current = dynamicFilter || {}
+    const updated = { ...current, [field]: value || undefined }
+    // Clean up undefined values
+    const cleaned = Object.fromEntries(Object.entries(updated).filter(([_, v]) => v !== undefined))
+    setValue('dynamic_filter', cleaned)
+    setPreviewData(null) // Clear preview when filter changes
+  }
+
   const onSubmit = async (data) => {
     setLoading(true)
     try {
+      // For dynamic groups, ensure dynamic_filter is included
+      if (data.type === 'dynamic' && !data.dynamic_filter) {
+        data.dynamic_filter = {}
+      }
       group ? await groupsAPI.update(group.id, data) : await groupsAPI.create(data)
       toast.success(group ? 'Group updated' : 'Group created')
       onSaved(); onClose()
-    } catch (err) { toast.error('Error saving group') }
+    } catch (err) { 
+      toast.error(err.response?.data?.detail || 'Error saving group') 
+    }
     finally { setLoading(false) }
   }
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-md animate-fade-in">
+      <div className="card w-full max-w-lg animate-fade-in">
         <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
           <h2 className="font-display font-semibold text-white">{group ? 'Edit Group' : 'New Group'}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
@@ -39,11 +105,11 @@ function GroupModal({ group, onClose, onSaved }) {
         <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
           <div>
             <label className="label">Group Name *</label>
-            <input {...register('name', { required: true })} className="input" placeholder="e.g. Phoenix Site A" />
+            <input {...register('name', { required: true })} className="input" placeholder="e.g. IT Department" />
           </div>
           <div>
             <label className="label">Description</label>
-            <input {...register('description')} className="input" />
+            <input {...register('description')} className="input" placeholder="Optional description" />
           </div>
           <div>
             <label className="label">Type</label>
@@ -52,6 +118,97 @@ function GroupModal({ group, onClose, onSaved }) {
               <option value="dynamic">Dynamic (auto-filtered)</option>
             </select>
           </div>
+
+          {/* Dynamic Group Filters */}
+          {type === 'dynamic' && (
+            <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
+              <h3 className="text-sm font-semibold text-white">Filter Criteria</h3>
+              <p className="text-xs text-slate-400">Users matching these criteria will be automatically included</p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label text-xs">Department</label>
+                  <select 
+                    className="select text-sm"
+                    value={dynamicFilter?.department || ''}
+                    onChange={(e) => updateDynamicFilter('department', e.target.value)}
+                  >
+                    <option value="">All Departments</option>
+                    {filterOptions.departments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="label text-xs">Title</label>
+                  <select 
+                    className="select text-sm"
+                    value={dynamicFilter?.title || ''}
+                    onChange={(e) => updateDynamicFilter('title', e.target.value)}
+                  >
+                    <option value="">All Titles</option>
+                    {filterOptions.titles.map(title => (
+                      <option key={title} value={title}>{title}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="label text-xs">Role</label>
+                  <select 
+                    className="select text-sm"
+                    value={dynamicFilter?.role || ''}
+                    onChange={(e) => updateDynamicFilter('role', e.target.value)}
+                  >
+                    <option value="">All Roles</option>
+                    {filterOptions.roles.map(role => (
+                      <option key={role} value={role}>{role.replace('_', ' ')}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <button 
+                type="button" 
+                onClick={handlePreview}
+                disabled={previewLoading}
+                className="w-full btn-outline text-sm py-2"
+              >
+                {previewLoading ? 'Loading...' : 'Preview Members'}
+              </button>
+
+              {/* Preview Results */}
+              {previewData && (
+                <div className="mt-3 p-3 bg-surface-900/50 rounded border border-surface-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-emerald-400">
+                      {previewData.member_count} Matching Users
+                    </span>
+                  </div>
+                  {previewData.member_count > 0 ? (
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {previewData.members.slice(0, 10).map(member => (
+                        <div key={member.id} className="text-xs text-slate-300 flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span className="truncate">{member.full_name}</span>
+                          <span className="text-slate-500">({member.email})</span>
+                        </div>
+                      ))}
+                      {previewData.member_count > 10 && (
+                        <div className="text-xs text-slate-500 pt-1">
+                          +{previewData.member_count - 10} more...
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-500">No users match the selected criteria</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center">
               {loading ? 'Saving...' : group ? 'Save' : 'Create Group'}
@@ -345,9 +502,24 @@ export function GroupsPage() {
                 </td>
                 <td className="px-5 py-3.5 text-sm text-slate-500">{timeAgo(g.created_at)}</td>
                 <td className="px-5 py-3.5">
-                  <span className={g.type === 'dynamic' ? 'badge-blue' : 'badge-gray'}>
-                    {g.type === 'dynamic' ? '⟳ Dynamic' : 'Static'}
-                  </span>
+                  <div className="space-y-1">
+                    <span className={g.type === 'dynamic' ? 'badge-blue' : 'badge-gray'}>
+                      {g.type === 'dynamic' ? '⟳ Dynamic' : 'Static'}
+                    </span>
+                    {g.type === 'dynamic' && g.dynamic_filter && (
+                      <div className="text-xs text-slate-400">
+                        {g.dynamic_filter.department && (
+                          <span className="inline-block bg-surface-700 px-1.5 py-0.5 rounded mr-1">{g.dynamic_filter.department}</span>
+                        )}
+                        {g.dynamic_filter.title && (
+                          <span className="inline-block bg-surface-700 px-1.5 py-0.5 rounded mr-1">{g.dynamic_filter.title}</span>
+                        )}
+                        {g.dynamic_filter.role && (
+                          <span className="inline-block bg-surface-700 px-1.5 py-0.5 rounded mr-1">{g.dynamic_filter.role.replace('_', ' ')}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </td>
                 {isManagerOrAbove && (
                   <td className="px-5 py-3.5">
