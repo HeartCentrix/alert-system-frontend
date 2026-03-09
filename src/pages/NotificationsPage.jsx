@@ -373,7 +373,7 @@ export function NotificationDetailPage() {
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {responses.map(r => (
                   <div key={r.id} className="flex items-center gap-2 text-sm">
-                    <span className={responseColor(r.response_type)}>{r.response_type.replace('_', ' ')}</span>
+                    <span className={responseColor(r.response_type)}>{r.response_type.replaceAll('_', ' ')}</span>
                     <span className="text-slate-400 truncate">{r.user_name}</span>
                     <span className="text-xs text-slate-600 ml-auto">{timeAgo(r.responded_at)}</span>
                   </div>

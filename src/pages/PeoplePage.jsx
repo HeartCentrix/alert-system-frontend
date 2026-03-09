@@ -201,7 +201,7 @@ function UserModal({ user, onClose, onSaved }) {
             <div>
               <label className="label">Role (optional)</label>
               <select {...register('role')} className="select">
-                {ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+                {ROLES.map(r => <option key={r} value={r}>{r.replaceAll('_', ' ')}</option>)}
               </select>
             </div>
             <div>
@@ -281,7 +281,7 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
                     u.role === 'super_admin' ? 'badge-red' :
                     u.role === 'admin' ? 'badge-orange' :
                     u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                  )}>{u.role?.replace('_', ' ')}</span>
+                  )}>{u.role?.replaceAll('_', ' ')}</span>
                 </div>
               ))}
             </div>
@@ -572,7 +572,7 @@ export default function PeoplePage() {
                       u.role === 'super_admin' ? 'badge-red' :
                       u.role === 'admin' ? 'badge-orange' :
                       u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                    )}>{u.role?.replace('_', ' ')}</span>
+                    )}>{u.role?.replaceAll('_', ' ')}</span>
                   </td>
                   <td className="px-5 py-3.5">
                     <span className={u.is_active ? 'badge-green' : 'badge-red'}>

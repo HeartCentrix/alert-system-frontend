@@ -251,7 +251,7 @@ function ProfileTab({ user }) {
             user?.role === 'admin' ? 'badge-orange' :
             user?.role === 'manager' ? 'badge-blue' : 'badge-gray'
           )}>
-            {user?.role?.replace('_', ' ')}
+            {user?.role?.replaceAll('_', ' ')}
           </span>
         </div>
       </div>

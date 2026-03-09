@@ -179,7 +179,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
                 {sidebarOpen && (
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
-                    <div className="text-xs text-slate-500 truncate">{user?.role?.replace('_', ' ')}</div>
+                    <div className="text-xs text-slate-500 truncate">{user?.role?.replaceAll('_', ' ')}</div>
                   </div>
                 )}
                 {sidebarOpen ? (
@@ -197,7 +197,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
               <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
                 <div className="text-center">
                   <div className="font-medium">{user?.full_name}</div>
-                  <div className="text-xs text-slate-400">{user?.role?.replace('_', ' ')}</div>
+                  <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
                   <div className="text-xs text-danger-400 mt-1">Click to logout</div>
                 </div>
               </TooltipContent>
