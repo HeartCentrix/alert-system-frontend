@@ -2,12 +2,15 @@ import { useQuery } from '@tanstack/react-query'
 import { MessageSquare, Phone, RefreshCw } from 'lucide-react'
 import api from '@/services/api'
 import { timeAgo, channelIcon, channelLabel, cn } from '@/utils/helpers'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 export default function IncomingPage() {
+  const isVisible = useIsDocumentVisible()
+
   const { data: messages = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['incoming-messages'],
     queryFn: () => api.get('/webhooks/incoming-messages?limit=100').then(r => r.data),
-    refetchInterval: 10_000,
+    refetchInterval: isVisible ? 10_000 : false,
   })
 
   const grouped = messages.reduce((acc, m) => {

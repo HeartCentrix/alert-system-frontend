@@ -5,6 +5,7 @@ import { notificationsAPI } from '@/services/api'
 import { timeAgo, statusColor, channelIcon, channelLabel, responseColor, cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 const PAGE_SIZE = 20
 
@@ -32,6 +33,7 @@ function maskPII(address) {
 export function NotificationsListPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const isVisible = useIsDocumentVisible()
   // Derive the active filter directly from the URL — this is the single source
   // of truth. Using useState would only capture the initial value on mount and
   // would NOT update when the sidebar navigates to a different query string
@@ -41,12 +43,12 @@ export function NotificationsListPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['notifications', status, page],
-    queryFn: () => notificationsAPI.list({ 
-      status: status || undefined, 
-      page, 
-      page_size: PAGE_SIZE 
+    queryFn: () => notificationsAPI.list({
+      status: status || undefined,
+      page,
+      page_size: PAGE_SIZE
     }).then(r => r.data),
-    refetchInterval: 15000,
+    refetchInterval: isVisible ? 15000 : false,
   })
 
   const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed']
@@ -200,23 +202,24 @@ export function NotificationsListPage() {
 export function NotificationDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const isVisible = useIsDocumentVisible()
 
   const { data: notification, refetch } = useQuery({
     queryKey: ['notification', id],
     queryFn: () => notificationsAPI.get(id).then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: isVisible ? 5000 : false,
   })
 
   const { data: delivery } = useQuery({
     queryKey: ['delivery', id],
     queryFn: () => notificationsAPI.delivery(id).then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: isVisible ? 5000 : false,
   })
 
   const { data: responses } = useQuery({
     queryKey: ['responses', id],
     queryFn: () => notificationsAPI.responses(id).then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: isVisible ? 5000 : false,
   })
 
   const handleCancel = async () => {

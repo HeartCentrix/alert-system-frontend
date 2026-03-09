@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L from 'leaflet'
 import { MapPin, Users, AlertCircle, Loader, Plus, X } from 'lucide-react'
 import { locationsAPI } from '@/services/api'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 // Fix default marker icons
 delete L.Icon.Default.prototype._getIconUrl
@@ -135,6 +136,7 @@ export default function LocationAudienceMap({
   height = 500,
 }) {
   const [selectedLocationId, setSelectedLocationId] = useState(null)
+  const isVisible = useIsDocumentVisible()
 
   // Load locations with auto-refresh
   const { data: locationsRaw = [], isLoading: loading, error } = useQuery({
@@ -142,7 +144,7 @@ export default function LocationAudienceMap({
     queryFn: () => locationsAPI.list().then(r =>
       (r.data || []).map(loc => ({ ...loc, memberCount: loc.user_count || 0 }))
     ),
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
   const locations = locationsRaw
 

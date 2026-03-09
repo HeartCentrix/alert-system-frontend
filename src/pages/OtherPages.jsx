@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import LocationAutocompleteInput from '@/components/LocationAutocompleteInput'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
@@ -597,10 +598,11 @@ export function LocationsPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [modal, setModal] = useState(null)
+  const isVisible = useIsDocumentVisible()
   const { data: locationsData, isLoading } = useQuery({
     queryKey: ['locations'],
     queryFn: () => locationsAPI.list().then(r => r.data),
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
   const locations = locationsData || []
   const deleteMutation = useMutation({
@@ -824,10 +826,11 @@ export function TemplatesPage() {
 export function IncidentsPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
+  const isVisible = useIsDocumentVisible()
   const { data: incidentsData, isLoading } = useQuery({
     queryKey: ['incidents'],
     queryFn: () => incidentsAPI.list().then(r => r.data),
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
   const incidents = incidentsData || []
 

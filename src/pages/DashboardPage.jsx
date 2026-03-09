@@ -12,6 +12,7 @@ import { dashboardAPI } from '@/services/api'
 import LocationMap from '@/components/LocationMap'
 import { timeAgo, severityColor, statusColor, formatDate } from '@/utils/helpers'
 import { cn } from '@/utils/helpers'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 const StatCard = ({ icon: Icon, label, value, sub, color = 'blue', onClick }) => (
   <div
@@ -54,23 +55,24 @@ const SeverityBlock = ({ label, count, color }) => (
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const isVisible = useIsDocumentVisible()
 
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => dashboardAPI.stats().then(r => r.data),
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
 
   const { data: mapData } = useQuery({
     queryKey: ['map-data'],
     queryFn: () => dashboardAPI.mapData().then(r => r.data),
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 30000 : false,
   })
 
   const { data: activity } = useQuery({
     queryKey: ['activity'],
     queryFn: () => dashboardAPI.activity(7).then(r => r.data),
-    refetchInterval: 60000,
+    refetchInterval: isVisible ? 60000 : false,
   })
 
   const chartData = activity?.map(d => ({
