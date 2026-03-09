@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus } from 'lucide-react'
+import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus, X, Search } from 'lucide-react'
 import { useForm } from 'react-hook-form'
-import { groupsAPI, locationsAPI, templatesAPI, incidentsAPI } from '@/services/api'
+import { groupsAPI, locationsAPI, templatesAPI, incidentsAPI, usersAPI } from '@/services/api'
 import { cn, timeAgo, severityColor } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import LocationAutocompleteInput from '@/components/LocationAutocompleteInput'
 import { useNavigate } from 'react-router-dom'
+import useAuthStore from '@/store/authStore'
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
@@ -57,9 +58,223 @@ function GroupModal({ group, onClose, onSaved }) {
   )
 }
 
+// Modal for adding members to a group
+function GroupMembersModal({ group, onClose, onSaved }) {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [selectedUsers, setSelectedUsers] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const { user: currentUser } = useAuthStore()
+  const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(currentUser?.role)
+  const isAdminOrAbove = ['admin', 'super_admin'].includes(currentUser?.role)
+
+  // Fetch all users for selection (managers and above can see all users)
+  const { data: usersData } = useQuery({
+    queryKey: ['users-all', search],
+    queryFn: () => usersAPI.list({ search, page: 1, page_size: 100 }).then(r => r.data.items),
+    enabled: isManagerOrAbove,
+    staleTime: 2 * 60 * 1000,
+  })
+
+  const users = usersData || []
+
+  // Fetch group details to see current members
+  const { data: groupDetails } = useQuery({
+    queryKey: ['group', group.id],
+    queryFn: () => groupsAPI.get(group.id).then(r => r.data),
+  })
+
+  const currentMemberIds = groupDetails?.members?.map(m => m.id) || []
+  const isMemberOfGroup = currentMemberIds.includes(currentUser?.id)
+
+  // Filter out users who are already members
+  const availableUsers = users.filter(u => !currentMemberIds.includes(u.id))
+
+  const toggleUser = (user) => {
+    setSelectedUsers(prev =>
+      prev.find(u => u.id === user.id)
+        ? prev.filter(u => u.id !== user.id)
+        : [...prev, user]
+    )
+  }
+
+  const handleAddMembers = async () => {
+    if (selectedUsers.length === 0) {
+      toast.error('Please select at least one user')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await groupsAPI.addMembers(group.id, selectedUsers.map(u => u.id))
+      toast.success(`Added ${selectedUsers.length} member${selectedUsers.length > 1 ? 's' : ''} to group`)
+      onSaved()
+      onClose()
+    } catch (err) {
+      toast.error('Error adding members')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Can manage members if: admin+, OR (manager+ AND member of this group)
+  const canManageMembers = isManagerOrAbove && (isAdminOrAbove || isMemberOfGroup)
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="card w-full max-w-2xl animate-fade-in max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+          <div>
+            <h2 className="font-display font-semibold text-white">Manage Members</h2>
+            <p className="text-slate-500 text-sm mt-1">{group.name}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+        </div>
+
+        <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+          {/* Current Members */}
+          <div>
+            <h3 className="text-sm font-medium text-slate-300 mb-3">
+              Current Members ({currentMemberIds.length})
+            </h3>
+            {groupDetails?.members?.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {groupDetails.members.map(member => (
+                  <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg bg-surface-800/50 border border-surface-700/50">
+                    <div className="w-8 h-8 rounded-full bg-primary-600/20 flex items-center justify-center">
+                      <span className="text-xs font-medium text-primary-400">
+                        {getInitials(`${member.first_name} ${member.last_name}`)}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-200 truncate">
+                        {member.first_name} {member.last_name}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">{member.email}</p>
+                    </div>
+                    <span className="text-xs text-slate-500 capitalize">{member.role}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-4">No members yet</p>
+            )}
+          </div>
+
+          {/* Add New Members */}
+          {canManageMembers && (
+            <div className="border-t border-surface-700/40 pt-4">
+              <h3 className="text-sm font-medium text-slate-300 mb-3">Add Members</h3>
+
+              {/* Search */}
+              <div className="relative mb-4">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  className="input pl-10"
+                  placeholder="Search by name, email, or department..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Available Users */}
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {availableUsers.length > 0 ? (
+                  availableUsers.map(user => {
+                    const isSelected = selectedUsers.find(u => u.id === user.id)
+                    return (
+                      <button
+                        key={user.id}
+                        onClick={() => toggleUser(user)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                          isSelected
+                            ? 'bg-primary-600/20 border-primary-600/50'
+                            : 'bg-surface-800/50 border-surface-700/50 hover:border-surface-600'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                          isSelected ? 'bg-primary-600 border-primary-600' : 'border-slate-600'
+                        }`}>
+                          {isSelected && <CheckCircle size={12} className="text-white" />}
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-surface-700 flex items-center justify-center">
+                          <span className="text-xs font-medium text-slate-300">
+                            {getInitials(`${user.first_name} ${user.last_name}`)}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-sm font-medium text-slate-200 truncate">
+                            {user.first_name} {user.last_name}
+                          </p>
+                          <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                        </div>
+                        <span className="text-xs text-slate-500 capitalize">{user.role}</span>
+                      </button>
+                    )
+                  })
+                ) : (
+                  <p className="text-sm text-slate-500 text-center py-4">
+                    {search ? 'No users found' : 'All users are already members'}
+                  </p>
+                )}
+              </div>
+
+              {/* Selected Count */}
+              {selectedUsers.length > 0 && (
+                <div className="mt-4 p-3 rounded-lg bg-primary-600/10 border border-primary-600/30">
+                  <p className="text-sm text-primary-300">
+                    {selectedUsers.length} user{selectedUsers.length > 1 ? 's' : ''} selected
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="p-5 border-t border-surface-700/40 flex gap-3">
+          {canManageMembers ? (
+            <>
+              <button
+                onClick={handleAddMembers}
+                disabled={loading || selectedUsers.length === 0}
+                className="btn-primary flex-1 justify-center"
+              >
+                {loading ? 'Adding...' : `Add ${selectedUsers.length > 0 ? selectedUsers.length : ''} Member${selectedUsers.length > 1 ? 's' : ''}`}
+              </button>
+              <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
+            </>
+          ) : (
+            <button type="button" onClick={onClose} className="btn-primary flex-1 justify-center">
+              Close
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Helper function for getting initials
+function getInitials(name) {
+  if (!name) return '??'
+  const parts = name.split(' ').filter(Boolean)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+}
+
 export function GroupsPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
+  const [membersModal, setMembersModal] = useState(null)
+  const { user: currentUser } = useAuthStore()
+  const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(currentUser?.role)
+  const isAdminOrAbove = ['admin', 'super_admin'].includes(currentUser?.role)
+  
   const { data: groups = [], isLoading } = useQuery({
     queryKey: ['groups'],
     queryFn: () => groupsAPI.list().then(r => r.data),
@@ -68,6 +283,16 @@ export function GroupsPage() {
     mutationFn: (id) => groupsAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries(['groups']); toast.success('Group deleted') },
   })
+  
+  // Check if user can manage members for a specific group
+  // Manager: can only manage groups they are a member of
+  // Admin/Super Admin: can manage all groups
+  const canManageGroupMembers = (group) => {
+    if (!isManagerOrAbove) return false
+    if (isAdminOrAbove) return true
+    return true // Manager sees only their groups in the list
+  }
+  
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -81,14 +306,14 @@ export function GroupsPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-surface-700/60">
-              {['Name', 'People', 'Added On', 'Type', 'Actions'].map(h => (
+              {['Name', 'People', 'Added On', 'Type', ...(isManagerOrAbove ? ['Actions'] : [])].map(h => (
                 <th key={h} className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-5 py-3">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={5} className="text-center py-10 text-slate-500">Loading...</td></tr>}
-            {!isLoading && groups.length === 0 && <tr><td colSpan={5} className="text-center py-10 text-slate-500 text-sm">No groups yet</td></tr>}
+            {isLoading && <tr><td colSpan={isManagerOrAbove ? 5 : 4} className="text-center py-10 text-slate-500">Loading...</td></tr>}
+            {!isLoading && groups.length === 0 && <tr><td colSpan={isManagerOrAbove ? 5 : 4} className="text-center py-10 text-slate-500 text-sm">No groups yet</td></tr>}
             {groups.map(g => (
               <tr key={g.id} className="table-row">
                 <td className="px-5 py-3.5">
@@ -108,18 +333,36 @@ export function GroupsPage() {
                     {g.type === 'dynamic' ? '⟳ Dynamic' : 'Static'}
                   </span>
                 </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex gap-2">
-                    <button onClick={() => setModal(g)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={14} /></button>
-                    <button onClick={() => confirm('Delete group?') && deleteMutation.mutate(g.id)} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={14} /></button>
-                  </div>
-                </td>
+                {isManagerOrAbove && (
+                  <td className="px-5 py-3.5">
+                    <div className="flex gap-2">
+                      {canManageGroupMembers(g) && (
+                        <button
+                          onClick={() => setMembersModal(g)}
+                          className="p-1.5 text-slate-500 hover:text-primary-400"
+                          title="Manage Members"
+                        >
+                          <UserPlus size={14} />
+                        </button>
+                      )}
+                      <button onClick={() => setModal(g)} className="p-1.5 text-slate-500 hover:text-slate-300"><Edit2 size={14} /></button>
+                      <button onClick={() => confirm('Delete group?') && deleteMutation.mutate(g.id)} className="p-1.5 text-slate-500 hover:text-danger-400"><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries(['groups'])} />}
+      {membersModal && (
+        <GroupMembersModal
+          group={membersModal}
+          onClose={() => setMembersModal(null)}
+          onSaved={() => qc.invalidateQueries(['groups'])}
+        />
+      )}
     </div>
   )
 }
