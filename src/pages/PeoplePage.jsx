@@ -528,6 +528,7 @@ export default function PeoplePage() {
       {/* CSV download template */}
       <div className="text-xs text-slate-500">
         CSV format: <code className="font-mono bg-surface-800 px-1.5 py-0.5 rounded">first_name, last_name, email, phone, department, title, employee_id, role</code>
+        <span className="ml-2 text-slate-400">• Maximum 1,000 rows per import</span>
       </div>
 
       <div className="card overflow-hidden">
