@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus, X, Search } from 'lucide-react'
+import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus, X, Search, AlertCircle } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { groupsAPI, locationsAPI, templatesAPI, incidentsAPI, usersAPI } from '@/services/api'
 import { cn, timeAgo, severityColor } from '@/utils/helpers'
@@ -62,8 +62,12 @@ function GroupModal({ group, onClose, onSaved }) {
       })
       setPreviewData(response.data)
       toast.success(`Found ${response.data.member_count} matching users`)
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Error previewing group')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error previewing group')
+      toast.error(errorMessage || 'Error previewing group')
     } finally {
       setPreviewLoading(false)
     }
@@ -274,8 +278,12 @@ function GroupMembersModal({ group, onClose, onSaved }) {
       toast.success(`Added ${selectedUsers.length} member${selectedUsers.length > 1 ? 's' : ''} to group`)
       onSaved()
       onClose()
-    } catch (err) {
-      toast.error('Error adding members')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error adding members')
+      toast.error(errorMessage || 'Error adding members')
     } finally {
       setLoading(false)
     }
@@ -450,8 +458,12 @@ export function GroupsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); toast.success('Group deleted') },
-    onError: (err) => {
-      toast.error(err.response?.data?.detail || 'Failed to delete group')
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Failed to delete group')
+      toast.error(errorMessage || 'Failed to delete group')
     },
   })
 
@@ -661,7 +673,13 @@ function LocationModal({ location, onClose, onSaved }) {
       location ? await locationsAPI.update(location.id, data) : await locationsAPI.create(data)
       toast.success(location ? 'Location updated' : 'Location created')
       onSaved(); onClose()
-    } catch { toast.error('Error saving location') }
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error saving location')
+      toast.error(errorMessage || 'Error saving location')
+    }
     finally { setLoading(false) }
   }
   
@@ -780,8 +798,12 @@ export function LocationsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => locationsAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['locations'] }); toast.success('Location deleted') },
-    onError: (err) => {
-      toast.error(err.response?.data?.detail || 'Failed to delete location')
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Failed to delete location')
+      toast.error(errorMessage || 'Failed to delete location')
     },
   })
 
@@ -880,8 +902,12 @@ export function TemplatesPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => templatesAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['templates'] }); toast.success('Template deleted') },
-    onError: (err) => {
-      toast.error(err.response?.data?.detail || 'Failed to delete template')
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Failed to delete template')
+      toast.error(errorMessage || 'Failed to delete template')
     },
   })
 
@@ -901,7 +927,13 @@ export function TemplatesPage() {
         template ? await templatesAPI.update(template.id, data) : await templatesAPI.create(data)
         toast.success('Template saved')
         qc.invalidateQueries({ queryKey: ['templates'] }); onClose()
-      } catch { toast.error('Error') }
+      } catch (error) {
+        const errorMessage = error.response?.data?.detail || 
+                            (typeof error.response?.data?.detail === 'object' 
+                              ? error.response.data.detail.message 
+                              : 'Error saving template')
+        toast.error(errorMessage || 'Error saving template')
+      }
       finally { setLoading(false) }
     }
     return (
@@ -1020,7 +1052,13 @@ export function IncidentsPage() {
         incident ? await incidentsAPI.update(incident.id, data) : await incidentsAPI.create(data)
         toast.success(incident ? 'Incident updated' : 'Incident created')
         qc.invalidateQueries({ queryKey: ['incidents'] }); onClose()
-      } catch { toast.error('Error') }
+      } catch (error) {
+        const errorMessage = error.response?.data?.detail || 
+                            (typeof error.response?.data?.detail === 'object' 
+                              ? error.response.data.detail.message 
+                              : 'Error saving incident')
+        toast.error(errorMessage || 'Error saving incident')
+      }
       finally { setLoading(false) }
     }
     return (

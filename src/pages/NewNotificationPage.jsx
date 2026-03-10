@@ -540,8 +540,12 @@ export default function NewNotificationPage() {
       const { data } = await notificationsAPI.create(payload)
       toast.success(v.scheduled_at ? 'Notification scheduled!' : 'Notification sent!')
       navigate(`/notifications/${data.id}`)
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to send notification')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Failed to send notification')
+      toast.error(errorMessage || 'Failed to send notification')
     } finally {
       setSending(false)
     }
