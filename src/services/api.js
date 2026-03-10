@@ -12,16 +12,16 @@ const api = axios.create({
 // Store the refresh promise to queue concurrent requests
 let refreshPromise = null
 
-// Clear only auth-related items from localStorage (not all origin data)
+// Clear only auth-related items from sessionStorage (not all origin data)
 function clearAuthData() {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
-  localStorage.removeItem('user')
+  sessionStorage.removeItem('access_token')
+  sessionStorage.removeItem('refresh_token')
+  sessionStorage.removeItem('user')
 }
 
 // Attach token on every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
+  const token = sessionStorage.getItem('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -62,7 +62,7 @@ api.interceptors.response.use(
 
       // Start refresh process - create a promise that all concurrent requests can await
       refreshPromise = (async () => {
-        const refreshToken = localStorage.getItem('refresh_token')
+        const refreshToken = sessionStorage.getItem('refresh_token')
 
         if (!refreshToken) {
           // Session expired - user needs to log in again
@@ -75,9 +75,9 @@ api.interceptors.response.use(
           const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
           const { access_token, refresh_token } = data
 
-          // Store new tokens
-          localStorage.setItem('access_token', access_token)
-          localStorage.setItem('refresh_token', refresh_token)
+          // Store new tokens in sessionStorage
+          sessionStorage.setItem('access_token', access_token)
+          sessionStorage.setItem('refresh_token', refresh_token)
 
           return { access_token, refresh_token }
         } catch (refreshErr) {
