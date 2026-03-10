@@ -34,12 +34,11 @@ export default function App() {
   const { init, isAuthenticated, isLoading } = useAuthStore()
 
   useEffect(() => {
-    console.log('[App] Initializing auth, current state:', { isAuthenticated, isLoading })
     init()
   }, [init])
 
   useEffect(() => {
-    console.log('[App] Auth state changed:', { isAuthenticated, isLoading })
+    // Auth state change tracking removed for security
   }, [isAuthenticated, isLoading])
 
   return (

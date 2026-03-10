@@ -91,26 +91,22 @@ export default function LoginPage() {
     if (lockoutExpiry && Date.now() < lockoutExpiry) return
     setLoading(true)
     try {
-      console.log('[Login] Attempting login for:', email)
       const result = await login(email, password)
-      
+
       // Check if MFA is required - check the result directly, not store state
       // Zustand state updates are async, so we check the response
       if (result?.status === 'mfa_required') {
-        console.log('[Login] MFA required, showing setup/challenge screen')
         return  // Don't show toast or navigate - MFA screen will render
       }
-      
+
       // Check if recovery codes were generated (first-time MFA setup)
       if (result?.recovery_codes && result.recovery_codes.length > 0) {
-        console.log('[Login] Recovery codes generated, showing display')
         setPendingRecoveryCodes(result.recovery_codes)
         setShowRecoveryCodesDisplay(true)
         return
       }
-      
+
       // Normal login success
-      console.log('[Login] Login successful')
       toast.success('Welcome back')
       setLockoutExpiry(null)
       setCountdown(null)
@@ -121,7 +117,6 @@ export default function LoginPage() {
 
       if (retryAfterSeconds) {
         const seconds = parseInt(retryAfterSeconds)
-        console.log('[Login] Rate limited, retry-after:', seconds, 'seconds')
         setLockoutExpiry(Date.now() + (seconds * 1000))
         toast.error(`${message}. Try again in ${formatCountdown(seconds)}.`)
       } else {
