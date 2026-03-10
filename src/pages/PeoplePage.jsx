@@ -99,8 +99,12 @@ function UserModal({ user, onClose, onSaved }) {
           onClose()
         }
       }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Error saving user')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error saving user')
+      toast.error(errorMessage || 'Error saving user')
     } finally {
       setLoading(false)
     }
@@ -359,7 +363,13 @@ export default function PeoplePage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => usersAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
-    onError: (err) => toast.error(err.response?.data?.detail || 'Error'),
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error deleting user')
+      toast.error(errorMessage || 'Error deleting user')
+    },
   })
 
   const bulkDeleteMutation = useMutation({
@@ -377,8 +387,12 @@ export default function PeoplePage() {
         toast.error(`${failed} user${failed !== 1 ? 's' : ''} could not be deleted`)
       }
     },
-    onError: (err) => {
-      toast.error(err.response?.data?.detail || 'Error deleting users')
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error deleting users')
+      toast.error(errorMessage || 'Error deleting users')
     },
   })
 
@@ -421,8 +435,12 @@ export default function PeoplePage() {
       }
 
       qc.invalidateQueries({ queryKey: ['users'] })
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Import failed')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Import failed')
+      toast.error(errorMessage || 'Import failed')
     } finally {
       setImporting(false)
       e.target.value = ''

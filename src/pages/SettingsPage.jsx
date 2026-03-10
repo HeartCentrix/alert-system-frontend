@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { User, Lock, Bell, Shield, CheckCircle, Edit2 } from 'lucide-react'
 import useAuthStore from '@/store/authStore'
 import { authAPI, locationsAPI } from '@/services/api'
 import { cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
-import { useQueryClient } from '@tanstack/react-query'
+import MFAManagementTab from '@/components/settings/MFAManagementTab'
+import { getPrimaryErrorMessage } from '@/utils/errorHandler'
 
 export default function SettingsPage() {
   const { user } = useAuthStore()
@@ -14,6 +15,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: 'profile', label: 'My Profile', icon: User },
+    { id: 'security', label: 'Security', icon: Shield },
     { id: 'password', label: 'Password', icon: Lock },
     { id: 'notifications', label: 'Preferences', icon: Bell },
   ]
@@ -48,6 +50,7 @@ export default function SettingsPage() {
       </div>
 
       {tab === 'profile' && <ProfileTab user={user} />}
+      {tab === 'security' && <MFAManagementTab />}
       {tab === 'password' && <PasswordTab />}
       {tab === 'notifications' && <PreferencesTab user={user} />}
     </div>
@@ -85,6 +88,41 @@ function ProfileTab({ user }) {
     })
   }, [user, reset])
 
+  // Validation rules for profile fields
+  const profileValidation = {
+    first_name: {
+      required: 'First name is required',
+      minLength: { value: 1, message: 'First name cannot be empty' },
+      maxLength: { value: 50, message: 'First name must be less than 50 characters' },
+      pattern: {
+        value: /^[a-zA-Z\u00C0-\u017F\s'-]+$/,
+        message: 'First name can only contain letters, spaces, hyphens, and apostrophes'
+      }
+    },
+    last_name: {
+      required: 'Last name is required',
+      minLength: { value: 1, message: 'Last name cannot be empty' },
+      maxLength: { value: 50, message: 'Last name must be less than 50 characters' },
+      pattern: {
+        value: /^[a-zA-Z\u00C0-\u017F\s'-]+$/,
+        message: 'Last name can only contain letters, spaces, hyphens, and apostrophes'
+      }
+    },
+    phone: {
+      pattern: {
+        value: /^[\d\s()+\-]*$/,
+        message: 'Please enter a valid phone number format'
+      },
+      maxLength: { value: 20, message: 'Phone number must be less than 20 characters' }
+    },
+    department: {
+      maxLength: { value: 100, message: 'Department must be less than 100 characters' }
+    },
+    title: {
+      maxLength: { value: 100, message: 'Title must be less than 100 characters' }
+    }
+  }
+
   // Fetch locations for the dropdown
   const { data: locationsData } = useQuery({
     queryKey: ['locations'],
@@ -120,8 +158,10 @@ function ProfileTab({ user }) {
       qc.setQueryData(['auth', 'me'], updatedUser)
       toast.success('Profile updated successfully')
       setIsEditing(false)
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to update profile')
+    } catch (error) {
+      // Normalize error to prevent rendering raw objects
+      const errorMessage = getPrimaryErrorMessage(error)
+      toast.error(errorMessage || 'Failed to update profile')
     } finally {
       setLoading(false)
     }
@@ -161,29 +201,65 @@ function ProfileTab({ user }) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">First Name</label>
-            <input {...register('first_name')} className="input" />
+            <input 
+              {...register('first_name', profileValidation.first_name)} 
+              className="input" 
+              maxLength={50}
+            />
+            {errors.first_name && (
+              <p className="text-xs text-danger-400 mt-1">{errors.first_name.message}</p>
+            )}
           </div>
           <div>
             <label className="label">Last Name</label>
-            <input {...register('last_name')} className="input" />
+            <input 
+              {...register('last_name', profileValidation.last_name)} 
+              className="input"
+              maxLength={50}
+            />
+            {errors.last_name && (
+              <p className="text-xs text-danger-400 mt-1">{errors.last_name.message}</p>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Phone</label>
-            <input {...register('phone')} className="input" placeholder="+1 555 000 0000" />
+            <input 
+              {...register('phone', profileValidation.phone)} 
+              className="input" 
+              placeholder="+1 555 000 0000"
+              maxLength={20}
+            />
+            {errors.phone && (
+              <p className="text-xs text-danger-400 mt-1">{errors.phone.message}</p>
+            )}
           </div>
           <div>
             <label className="label">Department</label>
-            <input {...register('department')} className="input" />
+            <input 
+              {...register('department', profileValidation.department)} 
+              className="input"
+              maxLength={100}
+            />
+            {errors.department && (
+              <p className="text-xs text-danger-400 mt-1">{errors.department.message}</p>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Title</label>
-            <input {...register('title')} className="input" />
+            <input 
+              {...register('title', profileValidation.title)} 
+              className="input"
+              maxLength={100}
+            />
+            {errors.title && (
+              <p className="text-xs text-danger-400 mt-1">{errors.title.message}</p>
+            )}
           </div>
           <div>
             <label className="label">Location</label>
@@ -308,8 +384,10 @@ function PasswordTab() {
       setSuccess(true)
       reset()
       setTimeout(() => setSuccess(false), 4000)
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to change password')
+    } catch (error) {
+      // Normalize error to prevent rendering raw objects
+      const errorMessage = getPrimaryErrorMessage(error)
+      toast.error(errorMessage || 'Failed to change password')
     } finally {
       setLoading(false)
     }
@@ -330,7 +408,10 @@ function PasswordTab() {
         <div>
           <label className="label">Current Password</label>
           <input
-            {...register('current_password', { required: 'Required' })}
+            {...register('current_password', { 
+              required: 'Current password is required',
+              minLength: { value: 1, message: 'Password cannot be empty' }
+            })}
             type="password"
             className="input"
             autoComplete="current-password"
@@ -343,12 +424,17 @@ function PasswordTab() {
           <label className="label">New Password</label>
           <input
             {...register('new_password', {
-              required: 'Required',
-              minLength: { value: 8, message: 'At least 8 characters' }
+              required: 'New password is required',
+              minLength: { value: 8, message: 'At least 8 characters' },
+              pattern: {
+                value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'`~]).{8,}$/,
+                message: 'Must contain uppercase, lowercase, number, and special character'
+              }
             })}
             type="password"
             className="input"
             autoComplete="new-password"
+            maxLength={128}
           />
           {errors.new_password && (
             <p className="text-xs text-danger-400 mt-1">{errors.new_password.message}</p>
@@ -358,12 +444,13 @@ function PasswordTab() {
           <label className="label">Confirm New Password</label>
           <input
             {...register('confirm_password', {
-              required: 'Required',
+              required: 'Please confirm your password',
               validate: value => value === watch('new_password') || 'Passwords do not match'
             })}
             type="password"
             className="input"
             autoComplete="new-password"
+            maxLength={128}
           />
           {errors.confirm_password && (
             <p className="text-xs text-danger-400 mt-1">{errors.confirm_password.message}</p>
@@ -378,8 +465,9 @@ function PasswordTab() {
         <h3 className="text-sm font-medium text-slate-300 mb-2">Password Requirements</h3>
         <ul className="space-y-1 text-xs text-slate-500">
           <li>• Minimum 8 characters</li>
-          <li>• Mix of uppercase and lowercase letters recommended</li>
-          <li>• Include numbers and special characters for stronger security</li>
+          <li>• Mix of uppercase and lowercase letters</li>
+          <li>• At least one number</li>
+          <li>• At least one special character</li>
         </ul>
       </div>
     </div>

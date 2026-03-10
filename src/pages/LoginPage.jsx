@@ -1,21 +1,27 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { Eye, EyeOff, Zap, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Zap, AlertCircle, Key } from 'lucide-react'
 import useAuthStore from '@/store/authStore'
 import toast from 'react-hot-toast'
+import MFASetupStep from '@/components/auth/MFASetupStep'
+import TFAChallengeStep from '@/components/auth/TFAChallengeStep'
+import MFARecoveryCodesDisplay from '@/components/auth/MFARecoveryCodesDisplay'
+import RecoveryCodeLoginForm from '@/components/auth/RecoveryCodeLoginForm'
 
 export default function LoginPage() {
-  const { login, isAuthenticated } = useAuthStore()
+  const { login, verifyMFA, verifyMFAWithRecoveryCode, mfaState, mfaChallengeToken, mfaQRCodeURI, mfaSecret, clearMFAState, isAuthenticated, recoveryCodes } = useAuthStore()
   const navigate = useNavigate()
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [lockoutExpiry, setLockoutExpiry] = useState(() => {
-    // Restore expiry timestamp from localStorage on mount
     const saved = localStorage.getItem('login_lockout_expiry')
     return saved ? parseInt(saved) : null
   })
   const [countdown, setCountdown] = useState(null)
+  const [showRecoveryCodeForm, setShowRecoveryCodeForm] = useState(false)
+  const [showRecoveryCodesDisplay, setShowRecoveryCodesDisplay] = useState(false)
+  const [pendingRecoveryCodes, setPendingRecoveryCodes] = useState(null)
   const { register, handleSubmit, formState: { errors } } = useForm()
 
   // Redirect authenticated users to dashboard
@@ -24,6 +30,13 @@ export default function LoginPage() {
       navigate('/dashboard', { replace: true })
     }
   }, [isAuthenticated, navigate])
+
+  // Clear MFA state on unmount
+  useEffect(() => {
+    return () => {
+      clearMFAState()
+    }
+  }, [])
 
   // Persist lockoutExpiry to localStorage
   useEffect(() => {
@@ -34,7 +47,7 @@ export default function LoginPage() {
     }
   }, [lockoutExpiry])
 
-  // Countdown timer - calculates remaining time from expiry timestamp
+  // Countdown timer
   useEffect(() => {
     if (!lockoutExpiry) {
       setCountdown(null)
@@ -44,13 +57,13 @@ export default function LoginPage() {
     const updateCountdown = () => {
       const now = Date.now()
       const remaining = Math.max(0, Math.floor((lockoutExpiry - now) / 1000))
-      
+
       if (remaining <= 0) {
         setLockoutExpiry(null)
         setCountdown(null)
         return
       }
-      
+
       setCountdown(remaining)
     }
 
@@ -59,7 +72,6 @@ export default function LoginPage() {
     return () => clearInterval(timer)
   }, [lockoutExpiry])
 
-  // Format countdown display: seconds if < 60, minutes if >= 60, hours if >= 3600
   const formatCountdown = (seconds) => {
     if (!seconds) return null
     if (seconds < 60) {
@@ -70,36 +82,50 @@ export default function LoginPage() {
       const secs = seconds % 60
       return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`
     }
-    // Hours
     const hours = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
   }
 
   const onSubmit = async ({ email, password }) => {
-    if (lockoutExpiry && Date.now() < lockoutExpiry) return // Block requests during cooldown
+    if (lockoutExpiry && Date.now() < lockoutExpiry) return
     setLoading(true)
     try {
       console.log('[Login] Attempting login for:', email)
-      await login(email, password)
+      const result = await login(email, password)
+      
+      // Check if MFA is required - check the result directly, not store state
+      // Zustand state updates are async, so we check the response
+      if (result?.status === 'mfa_required') {
+        console.log('[Login] MFA required, showing setup/challenge screen')
+        return  // Don't show toast or navigate - MFA screen will render
+      }
+      
+      // Check if recovery codes were generated (first-time MFA setup)
+      if (result?.recovery_codes && result.recovery_codes.length > 0) {
+        console.log('[Login] Recovery codes generated, showing display')
+        setPendingRecoveryCodes(result.recovery_codes)
+        setShowRecoveryCodesDisplay(true)
+        return
+      }
+      
+      // Normal login success
       console.log('[Login] Login successful')
       toast.success('Welcome back')
       setLockoutExpiry(null)
       setCountdown(null)
       navigate('/dashboard')
     } catch (err) {
-      // Extract error message and retry-after header
       const message = err.response?.data?.detail || err.message || 'Invalid credentials'
-      // Axios normalizes headers to lowercase, check both variants
       const retryAfterSeconds = err.response?.headers?.['retry-after'] || err.response?.headers?.['Retry-After']
 
       if (retryAfterSeconds) {
         const seconds = parseInt(retryAfterSeconds)
         console.log('[Login] Rate limited, retry-after:', seconds, 'seconds')
-        // Store expiry timestamp so countdown continues correctly across navigation
         setLockoutExpiry(Date.now() + (seconds * 1000))
         toast.error(`${message}. Try again in ${formatCountdown(seconds)}.`)
       } else {
+        // Don't show error for MFA flows
         toast.error(message)
       }
     } finally {
@@ -107,6 +133,160 @@ export default function LoginPage() {
     }
   }
 
+  const handleMFAVerify = async (code) => {
+    setLoading(true)
+    try {
+      await verifyMFA(code)
+      toast.success('Authentication successful')
+      setLockoutExpiry(null)
+      navigate('/dashboard')
+    } catch (err) {
+      const message = err.response?.data?.detail || err.message
+      // Provide specific error messages based on the error type
+      let errorMessage = 'Invalid code. Please try again.'
+
+      if (message?.includes('locked')) {
+        errorMessage = 'Account locked due to too many failed attempts. Please try again later.'
+      } else if (message?.includes('expired')) {
+        errorMessage = 'Session expired. Please try logging in again.'
+      } else if (message?.includes('recovery')) {
+        errorMessage = 'Invalid recovery code'
+      } else if (message) {
+        // Use the message from server (includes "Invalid credentials or MFA code")
+        errorMessage = message
+      }
+
+      // Don't show toast for invalid codes - let the inline error display handle it
+      // This keeps the user on the MFA page without additional notifications
+      throw new Error(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRecoveryCodeVerify = async (code) => {
+    setLoading(true)
+    try {
+      await verifyMFAWithRecoveryCode(code, mfaChallengeToken)
+      toast.success('Recovery code verified. Welcome back!')
+      setLockoutExpiry(null)
+      navigate('/dashboard')
+    } catch (err) {
+      const message = err.response?.data?.detail || err.message
+      // Provide specific error messages based on the error type
+      let errorMessage = 'Invalid recovery code. Please try again.'
+
+      if (message?.includes('locked')) {
+        errorMessage = 'Account locked due to too many failed attempts. Please try again later.'
+      } else if (message?.includes('expired')) {
+        errorMessage = 'Session expired. Please try logging in again.'
+      } else if (message?.includes('used')) {
+        errorMessage = 'This recovery code has already been used'
+      } else if (message) {
+        errorMessage = message
+      }
+
+      // Don't show toast for invalid codes - let the inline error display handle it
+      throw new Error(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancelMFA = () => {
+    // Clear MFA state and return to login form (not showing toast)
+    clearMFAState()
+    setShowRecoveryCodeForm(false)
+  }
+
+  const handleRecoveryCodesDismiss = () => {
+    setShowRecoveryCodesDisplay(false)
+    setPendingRecoveryCodes(null)
+    toast.success('Recovery codes saved. Continue to dashboard.')
+    navigate('/dashboard')
+  }
+
+  // Render MFA setup step
+  if (mfaState === 'setup_required' && mfaQRCodeURI) {
+    return (
+      <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4"
+        style={{ backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.15) 0%, transparent 70%)' }}>
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="card p-8">
+            <MFASetupStep
+              qrCodeURI={mfaQRCodeURI}
+              secret={mfaSecret || ''}
+              onVerify={handleMFAVerify}
+              onCancel={handleCancelMFA}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Render MFA challenge step
+  if (mfaState === 'challenge_required') {
+    if (showRecoveryCodeForm) {
+      // Show recovery code entry form
+      return (
+        <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4"
+          style={{ backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.15) 0%, transparent 70%)' }}>
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+            style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+          <div className="w-full max-w-md animate-fade-in">
+            <div className="card p-8">
+              <RecoveryCodeLoginForm
+                onVerify={handleRecoveryCodeVerify}
+                onBackToMFA={() => setShowRecoveryCodeForm(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Show regular MFA challenge with option to use recovery code
+    return (
+      <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4"
+        style={{ backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.15) 0%, transparent 70%)' }}>
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="card p-8">
+            <TFAChallengeStep
+              onVerify={handleMFAVerify}
+              onCancel={handleCancelMFA}
+              onUseRecoveryCode={() => setShowRecoveryCodeForm(true)}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Render recovery codes display (after first-time MFA setup)
+  if (showRecoveryCodesDisplay && pendingRecoveryCodes) {
+    return (
+      <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4"
+        style={{ backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.15) 0%, transparent 70%)' }}>
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="card p-8">
+            <MFARecoveryCodesDisplay
+              codes={pendingRecoveryCodes}
+              onDismiss={handleRecoveryCodesDismiss}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Render normal login form
   return (
     <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4"
       style={{ backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.15) 0%, transparent 70%)' }}>

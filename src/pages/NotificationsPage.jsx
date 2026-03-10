@@ -228,8 +228,12 @@ export function NotificationDetailPage() {
       await notificationsAPI.cancel(id)
       toast.success('Notification cancelled')
       refetch()
-    } catch (err) {
-      toast.error('Cannot cancel this notification')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Cannot cancel this notification')
+      toast.error(errorMessage || 'Cannot cancel this notification')
     }
   }
 

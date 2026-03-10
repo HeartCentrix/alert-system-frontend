@@ -65,7 +65,10 @@ api.interceptors.response.use(
         const refreshToken = localStorage.getItem('refresh_token')
 
         if (!refreshToken) {
-          throw new Error('No refresh token')
+          // Session expired - user needs to log in again
+          clearAuthData()
+          window.location.href = '/#/login'
+          throw new Error('Session expired. Please log in again.')
         }
 
         try {
@@ -111,6 +114,23 @@ export const authAPI = {
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, new_password) => api.post('/auth/reset-password', { token, new_password }),
   changePassword: (current, next) => api.post('/auth/change-password', { current_password: current, new_password: next }),
+  // MFA endpoints
+  verifyMFA: (challenge_token, code) => api.post('/auth/mfa/verify-login', { challenge_token, code }),
+  verifyMFAWithRecoveryCode: (challenge_token, recovery_code) => api.post('/auth/mfa/recovery-code/verify', { challenge_token, recovery_code }),
+  getMFAStatus: () => api.get('/auth/mfa/status'),
+  initiateMFA: () => api.post('/auth/mfa/initiate'),
+  confirmMFA: (code) => api.post('/auth/mfa/confirm', { code }),
+  disableMFA: (code) => api.post('/auth/mfa/disable', { code }),
+  // MFA Lifecycle endpoints (secure, with reauthentication)
+  startMFAEnrollment: (current_password) => api.post('/auth/mfa/enroll/start', { current_password }),
+  completeMFAEnrollment: (code) => api.post('/auth/mfa/enroll/complete', { code }),
+  disableMFAWithReauth: (current_password, mfa_code) => api.post('/auth/mfa/disable', { current_password, mfa_code }),
+  startMFAReset: (current_password, mfa_code) => api.post('/auth/mfa/reset/start', { current_password, mfa_code }),
+  completeMFAReset: (code) => api.post('/auth/mfa/reset/complete', { code }),
+  // Recovery code endpoints
+  getRecoveryCodesStatus: () => api.get('/auth/mfa/recovery-codes/status'),
+  regenerateRecoveryCodes: (params) => api.post('/auth/mfa/recovery-codes/regenerate', params),
+  // params: { current_password, method: 'totp' | 'recovery_code', mfa_code?, recovery_code? }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
