@@ -36,17 +36,11 @@ const useAuthStore = create((set, get) => ({
 
   login: async (email, password) => {
     const { data } = await authAPI.login(email, password)
-    
-    console.log('[AuthStore] Login response:', data)
-    console.log('[AuthStore] Response status:', data?.status)
-    console.log('[AuthStore] Response mfa_configured:', data?.mfa_configured)
-    
+
     // Check response type based on status field
     if (data.status === 'mfa_required') {
-      console.log('[AuthStore] MFA required flow')
       // MFA is required - store state and let UI handle it
       if (!data.mfa_configured) {
-        console.log('[AuthStore] Setting up MFA setup state')
         // User needs to set up MFA first
         set({
           mfaState: 'setup_required',
@@ -55,7 +49,6 @@ const useAuthStore = create((set, get) => ({
           mfaSecret: data.secret,  // Store secret for manual entry
         })
       } else {
-        console.log('[AuthStore] Setting up MFA challenge state')
         // User has MFA configured - just needs to enter code
         set({
           mfaState: 'challenge_required',
@@ -65,9 +58,8 @@ const useAuthStore = create((set, get) => ({
       }
       return data
     }
-    
+
     // Normal login success
-    console.log('[AuthStore] Normal login success')
     if (!data?.access_token) {
       throw new Error('No token received from server')
     }
