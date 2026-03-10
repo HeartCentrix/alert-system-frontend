@@ -12,7 +12,7 @@ const useAuthStore = create((set, get) => ({
   mfaSecret: null,  // Raw TOTP secret for manual entry
 
   init: async () => {
-    const token = localStorage.getItem('access_token')
+    const token = sessionStorage.getItem('access_token')
     if (!token) {
       set({ isLoading: false })
       return
@@ -23,8 +23,8 @@ const useAuthStore = create((set, get) => ({
     } catch (error) {
       // Only clear tokens on 401 (invalid token), not on network errors
       if (error?.response?.status === 401) {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        sessionStorage.removeItem('access_token')
+        sessionStorage.removeItem('refresh_token')
         set({ user: null, isAuthenticated: false, isLoading: false, mfaState: null })
       } else {
         // Network error or server error - keep tokens and try again later
@@ -62,8 +62,8 @@ const useAuthStore = create((set, get) => ({
     if (!data?.access_token) {
       throw new Error('No token received from server')
     }
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
+    sessionStorage.setItem('access_token', data.access_token)
+    sessionStorage.setItem('refresh_token', data.refresh_token)
     set({
       user: data.user,
       isAuthenticated: true,
@@ -84,16 +84,29 @@ const useAuthStore = create((set, get) => ({
 
     const { data } = await authAPI.verifyMFA(mfaChallengeToken, code)
 
-    // Success - store tokens and user
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
-    set({
-      user: data.user,
-      isAuthenticated: true,
-      mfaState: null,
-      mfaChallengeToken: null,
-      mfaQRCodeURI: null,
-    })
+    // Success - store tokens in sessionStorage
+    sessionStorage.setItem('access_token', data.access_token)
+    sessionStorage.setItem('refresh_token', data.refresh_token)
+
+    // If recovery codes are present (first-time MFA setup), don't set isAuthenticated yet
+    // The UI needs to show recovery codes modal first before marking user as authenticated
+    if (data?.recovery_codes && data.recovery_codes.length > 0) {
+      set({
+        user: data.user,
+        isAuthenticated: false,  // Keep false until recovery codes are dismissed
+        mfaState: null,
+        mfaChallengeToken: null,
+        mfaQRCodeURI: null,
+      })
+    } else {
+      set({
+        user: data.user,
+        isAuthenticated: true,
+        mfaState: null,
+        mfaChallengeToken: null,
+        mfaQRCodeURI: null,
+      })
+    }
     return data
   },
 
@@ -105,9 +118,9 @@ const useAuthStore = create((set, get) => ({
 
     const { data } = await authAPI.verifyMFAWithRecoveryCode(token, recoveryCode)
 
-    // Success - store tokens and user
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
+    // Success - store tokens in sessionStorage
+    sessionStorage.setItem('access_token', data.access_token)
+    sessionStorage.setItem('refresh_token', data.refresh_token)
     set({
       user: data.user,
       isAuthenticated: true,
@@ -128,10 +141,10 @@ const useAuthStore = create((set, get) => ({
   },
 
   logout: async () => {
-    const refresh_token = localStorage.getItem('refresh_token')
+    const refresh_token = sessionStorage.getItem('refresh_token')
     try { await authAPI.logout(refresh_token) } catch {}
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+    sessionStorage.removeItem('access_token')
+    sessionStorage.removeItem('refresh_token')
     set({
       user: null,
       isAuthenticated: false,

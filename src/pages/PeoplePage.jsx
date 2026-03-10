@@ -58,10 +58,13 @@ function UserModal({ user, onClose, onSaved }) {
   // Reset form when user prop changes (prevents stale values on re-mount)
   useEffect(() => {
     reset(user || { role: 'viewer', preferred_channels: ['sms', 'email'] })
+    // Reset generated password state when modal opens/closes
+    setGeneratedPassword(null)
+    setShowPassword(false)
   }, [user, reset])
   
   // Fetch locations for the dropdown
-  const { data: locationsData } = useQuery({
+  const { data: locationsData, error: locationsError } = useQuery({
     queryKey: ['locations'],
     queryFn: async () => {
       const { locationsAPI } = await import('@/services/api')
@@ -69,15 +72,23 @@ function UserModal({ user, onClose, onSaved }) {
       return response.data || []
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 1,
+    refetchOnWindowFocus: false,
   })
   const locations = locationsData || []
+  
+  // Handle locations fetch error gracefully
+  if (locationsError && !locationsError.isFetching) {
+    console.error('Failed to load locations:', locationsError)
+    // Don't crash the component - just continue with empty locations list
+  }
 
   const onSubmit = async (data) => {
     setLoading(true)
     try {
       // Clean the data to remove empty strings
       const cleanedData = cleanUserData(data)
-      
+
       if (user?.id) {
         await usersAPI.update(user.id, cleanedData)
         toast.success('User updated')
@@ -93,6 +104,8 @@ function UserModal({ user, onClose, onSaved }) {
           setGeneratedPassword(password)
           // Don't close modal - let user copy the password first
           toast.success('User created! Copy the password below')
+          // Reset form to prevent re-submission
+          reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
         } else {
           toast.success('User created')
           onSaved()
@@ -100,11 +113,80 @@ function UserModal({ user, onClose, onSaved }) {
         }
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
-                            : 'Error saving user')
-      toast.error(errorMessage || 'Error saving user')
+      console.error('Error saving user:', error)
+      
+      // Handle different error types
+      let errorMessage = 'Error saving user'
+      
+      if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please log in again.'
+        // Clear auth data and redirect to login
+        sessionStorage.removeItem('access_token')
+        sessionStorage.removeItem('refresh_token')
+        window.location.href = '/login'
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have permission to perform this action.'
+      } else if (error.response?.status === 422) {
+        // Validation error - extract field-specific errors
+        const errors = error.response?.data?.detail
+        if (Array.isArray(errors)) {
+          // Format: [{loc: ['body', 'email'], msg: '...', type: '...'}]
+          const fieldErrors = errors.map(e => {
+            const field = e.loc?.[1] || e.loc?.[0] || 'field'
+            const rawMsg = e.msg || ''
+            
+            // Convert technical messages to human-readable
+            let friendlyMsg = rawMsg
+            
+            // Email validation messages
+            if (field === 'email') {
+              if (rawMsg.includes('email') || rawMsg.includes('@')) {
+                friendlyMsg = 'Enter a valid email address (e.g., name@company.com)'
+              }
+            }
+            
+            // Phone validation messages
+            if (field === 'phone') {
+              if (rawMsg.includes('pattern')) {
+                friendlyMsg = 'Phone can only contain numbers, spaces, and symbols like +, -, (, )'
+              }
+            }
+            
+            // Password validation messages
+            if (field === 'password') {
+              if (rawMsg.includes('8')) {
+                friendlyMsg = 'Password must be at least 8 characters'
+              }
+            }
+            
+            // Name validation messages
+            if (field === 'first_name' || field === 'last_name') {
+              if (rawMsg.includes('required') || rawMsg.includes('length')) {
+                friendlyMsg = 'This field is required'
+              }
+              if (rawMsg.includes('pattern')) {
+                friendlyMsg = 'Use only letters, spaces, hyphens, and apostrophes'
+              }
+            }
+            
+            return `${field.replace('_', ' ')}: ${friendlyMsg}`
+          })
+          errorMessage = fieldErrors.join(', ')
+        } else if (error.response?.data?.detail) {
+          errorMessage = typeof error.response.data.detail === 'object'
+            ? error.response.data.detail.message
+            : error.response.data.detail
+        }
+      } else if (error.response?.data?.detail) {
+        errorMessage = typeof error.response.data.detail === 'object'
+          ? error.response.data.detail.message
+          : error.response.data.detail
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      toast.error(errorMessage)
+      // Keep modal open on error so user can fix issues
     } finally {
       setLoading(false)
     }
@@ -130,7 +212,20 @@ function UserModal({ user, onClose, onSaved }) {
           </div>
           <div>
             <label className="label">Email *</label>
-            <input {...register('email', { required: true })} type="email" className="input" />
+            <input 
+              {...register('email', { 
+                required: 'Email is required',
+                pattern: {
+                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                  message: 'Enter a valid email address (e.g., name@company.com)'
+                }
+              })} 
+              type="email" 
+              className="input" 
+            />
+            {errors.email && (
+              <p className="mt-1 text-xs text-danger-400">{errors.email.message}</p>
+            )}
           </div>
           {!user && (
             <div>
@@ -189,7 +284,19 @@ function UserModal({ user, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Phone (SMS/Voice) (optional)</label>
-              <input {...register('phone')} className="input" placeholder="+1 555 000 0000" />
+              <input 
+                {...register('phone', { 
+                  pattern: {
+                    value: /^[\d\s()+\-]*$/,
+                    message: 'Use only numbers, spaces, and symbols like +, -, (, )'
+                  }
+                })} 
+                className="input" 
+                placeholder="+1 555 000 0000" 
+              />
+              {errors.phone && (
+                <p className="mt-1 text-xs text-danger-400">{errors.phone.message}</p>
+              )}
             </div>
             <div>
               <label className="label">Department (optional)</label>
@@ -699,7 +806,9 @@ export default function PeoplePage() {
       {modal && (
         <UserModal
           user={modal === 'create' ? null : modal}
-          onClose={() => setModal(null)}
+          onClose={() => {
+            setModal(null)
+          }}
           onSaved={() => qc.invalidateQueries({ queryKey: ['users'] })}
         />
       )}

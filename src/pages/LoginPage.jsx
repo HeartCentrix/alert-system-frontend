@@ -131,7 +131,16 @@ export default function LoginPage() {
   const handleMFAVerify = async (code) => {
     setLoading(true)
     try {
-      await verifyMFA(code)
+      const result = await verifyMFA(code)
+
+      // If this was first-time MFA setup, backend returns recovery codes once.
+      // Show them before navigating — user must acknowledge before proceeding.
+      if (result?.recovery_codes && result.recovery_codes.length > 0) {
+        setPendingRecoveryCodes(result.recovery_codes)
+        setShowRecoveryCodesDisplay(true)
+        return  // Don't navigate yet — wait for user to dismiss recovery codes modal
+      }
+
       toast.success('Authentication successful')
       setLockoutExpiry(null)
       navigate('/dashboard')
@@ -195,6 +204,11 @@ export default function LoginPage() {
   }
 
   const handleRecoveryCodesDismiss = () => {
+    // Now mark user as authenticated after they've seen recovery codes
+    const { updateUser } = useAuthStore.getState()
+    updateUser({})  // Trigger isAuthenticated state update
+    useAuthStore.setState({ isAuthenticated: true })
+    
     setShowRecoveryCodesDisplay(false)
     setPendingRecoveryCodes(null)
     toast.success('Recovery codes saved. Continue to dashboard.')
