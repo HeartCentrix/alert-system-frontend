@@ -21,7 +21,6 @@ const useAuthStore = create((set, get) => ({
       const { data } = await authAPI.me()
       set({ user: data, isAuthenticated: true, isLoading: false })
     } catch (error) {
-      console.error('Auth init failed:', error?.response?.status, error?.response?.data)
       // Only clear tokens on 401 (invalid token), not on network errors
       if (error?.response?.status === 401) {
         localStorage.removeItem('access_token')
