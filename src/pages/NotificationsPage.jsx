@@ -52,8 +52,9 @@ export function NotificationsListPage() {
   })
 
   const statuses = ['', 'sent', 'sending', 'scheduled', 'draft', 'failed', 'partially_sent']
-  const notifications = data?.items || []
-  const total = data?.total || 0
+  // Handle both array response and paginated response { items, total }
+  const notifications = Array.isArray(data) ? data : (data?.items || [])
+  const total = Array.isArray(data) ? data.length : (data?.total || 0)
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   const handlePageChange = (newPage) => {
@@ -227,8 +228,12 @@ export function NotificationDetailPage() {
       await notificationsAPI.cancel(id)
       toast.success('Notification cancelled')
       refetch()
-    } catch (err) {
-      toast.error('Cannot cancel this notification')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Cannot cancel this notification')
+      toast.error(errorMessage || 'Cannot cancel this notification')
     }
   }
 

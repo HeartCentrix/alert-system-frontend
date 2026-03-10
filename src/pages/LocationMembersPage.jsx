@@ -71,9 +71,12 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
       onAssigned()
       onClose()
     },
-    onError: (err) => {
-      const message = err.response?.data?.detail || 'Failed to assign user'
-      toast.error(message)
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Failed to assign user')
+      toast.error(errorMessage || 'Failed to assign user')
     },
   })
 
@@ -438,9 +441,12 @@ export default function LocationMembersPage() {
       refetch()
       setRemoveConfirm(null)
     },
-    onError: (err) => {
-      const message = err.response?.data?.detail || 'Failed to remove user'
-      toast.error(message)
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Failed to remove user')
+      toast.error(errorMessage || 'Failed to remove user')
     },
   })
 

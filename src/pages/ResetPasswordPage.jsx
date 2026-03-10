@@ -27,15 +27,18 @@ export default function ResetPasswordPage() {
 
   const onSubmit = async ({ new_password }) => {
     if (!token) return
-    
+
     setLoading(true)
     try {
       await authAPI.resetPassword(token, new_password)
       toast.success('Password reset successfully! Please sign in.')
       navigate('/login')
-    } catch (err) {
-      console.error('Reset password error:', err.response?.data)
-      toast.error(err.response?.data?.detail || 'Failed to reset password. Token may be expired.')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Failed to reset password. Token may be expired.')
+      toast.error(errorMessage || 'Failed to reset password. Token may be expired.')
     } finally {
       setLoading(false)
     }

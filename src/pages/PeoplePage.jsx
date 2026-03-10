@@ -99,8 +99,12 @@ function UserModal({ user, onClose, onSaved }) {
           onClose()
         }
       }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Error saving user')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error saving user')
+      toast.error(errorMessage || 'Error saving user')
     } finally {
       setLoading(false)
     }
@@ -359,7 +363,13 @@ export default function PeoplePage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => usersAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
-    onError: (err) => toast.error(err.response?.data?.detail || 'Error'),
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error deleting user')
+      toast.error(errorMessage || 'Error deleting user')
+    },
   })
 
   const bulkDeleteMutation = useMutation({
@@ -377,8 +387,12 @@ export default function PeoplePage() {
         toast.error(`${failed} user${failed !== 1 ? 's' : ''} could not be deleted`)
       }
     },
-    onError: (err) => {
-      toast.error(err.response?.data?.detail || 'Error deleting users')
+    onError: (error) => {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Error deleting users')
+      toast.error(errorMessage || 'Error deleting users')
     },
   })
 
@@ -388,6 +402,15 @@ export default function PeoplePage() {
   const handleImport = async (e) => {
     const file = e.target.files[0]
     if (!file) return
+
+    // Validate file type using MIME type (not just extension)
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error(`Invalid file type. Expected CSV, got ${file.type || 'unknown'}`)
+      e.target.value = ''
+      return
+    }
+
     setImporting(true)
     try {
       const { data: result } = await usersAPI.importCSV(file)
@@ -412,8 +435,12 @@ export default function PeoplePage() {
       }
 
       qc.invalidateQueries({ queryKey: ['users'] })
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Import failed')
+    } catch (error) {
+      const errorMessage = error.response?.data?.detail || 
+                          (typeof error.response?.data?.detail === 'object' 
+                            ? error.response.data.detail.message 
+                            : 'Import failed')
+      toast.error(errorMessage || 'Import failed')
     } finally {
       setImporting(false)
       e.target.value = ''
@@ -528,6 +555,7 @@ export default function PeoplePage() {
       {/* CSV download template */}
       <div className="text-xs text-slate-500">
         CSV format: <code className="font-mono bg-surface-800 px-1.5 py-0.5 rounded">first_name, last_name, email, phone, department, title, employee_id, role</code>
+        <span className="ml-2 text-slate-400">• Maximum 1,000 rows per import</span>
       </div>
 
       <div className="card overflow-hidden">
