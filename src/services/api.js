@@ -157,6 +157,7 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   logout: () => api.post('/auth/logout', {}),   // no body — token in cookie
+  refresh: () => api.post('/auth/refresh', {}, { withCredentials: true }),  // refresh using HttpOnly cookie
   me: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/me', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),

@@ -19,9 +19,31 @@ const useAuthStore = create((set, get) => ({
     set({ isInitializing: true })
 
     try {
+      // First, try to get user info (access token might still be in memory)
       const { data } = await authAPI.me()
       set({ user: data, isAuthenticated: true, isLoading: false, isInitializing: false })
     } catch (error) {
+      // If /me fails (likely 401/403 due to missing access token after refresh),
+      // try to refresh the access token using the HttpOnly refresh token cookie
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        try {
+          // Attempt silent refresh using refresh token cookie
+          const { data: refreshData } = await authAPI.refresh()
+          
+          // If refresh succeeds, store the new access token and fetch user info
+          if (refreshData?.access_token) {
+            set({ accessToken: refreshData.access_token })
+            const { data: userData } = await authAPI.me()
+            set({ user: userData, isAuthenticated: true, isLoading: false, isInitializing: false })
+            return
+          }
+        } catch (refreshError) {
+          // Refresh failed - session truly expired, clear everything
+          console.log('Session refresh failed, clearing session')
+        }
+      }
+      
+      // Either not a 401/403 error, or refresh also failed - clear session
       set({ user: null, isAuthenticated: false, isLoading: false, isInitializing: false, accessToken: null, mfaState: null })
     }
   },
