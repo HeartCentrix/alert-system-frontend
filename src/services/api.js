@@ -96,8 +96,8 @@ api.interceptors.response.use(
 
       refreshPromise = (async () => {
         try {
-          // Get refresh token from store (for cross-origin Vercel + Railway)
-          const refreshToken = _getAuthStore?.()?.refreshToken || null
+          // Get refresh token from store or sessionStorage (for cross-origin Vercel + Railway)
+          const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
           
           // POST /auth/refresh — send refresh token in body (cross-origin) and cookie (same-origin)
           const { data } = await axios.post(
@@ -108,10 +108,12 @@ api.interceptors.response.use(
 
           // Store new tokens in Zustand memory via accessor
           _getAuthStore?.()?.setAccessToken?.(data.access_token)
-          // Also update refresh token if rotated
+          // Also update refresh token if rotated (save to sessionStorage for cross-origin)
           if (data.refresh_token) {
-            _getAuthStore?.()?.refreshToken ? 
-              _getAuthStore.getState().refreshToken = data.refresh_token : null
+            sessionStorage.setItem('refresh_token', data.refresh_token)
+            if (_getAuthStore?.()?.refreshToken !== undefined) {
+              _getAuthStore.getState().refreshToken = data.refresh_token
+            }
           }
 
           return { access_token: data.access_token, refresh_token: data.refresh_token }

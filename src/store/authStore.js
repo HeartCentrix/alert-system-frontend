@@ -177,6 +177,7 @@ const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try { await authAPI.logout() } catch {}
+    clearRefreshToken()
     set({
       accessToken: null,
       user: null,
@@ -189,6 +190,7 @@ const useAuthStore = create((set, get) => ({
   },
 
   clearSession: () => {
+    clearRefreshToken()
     set({
       accessToken: null,
       user: null,
