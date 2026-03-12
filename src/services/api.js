@@ -96,17 +96,25 @@ api.interceptors.response.use(
 
       refreshPromise = (async () => {
         try {
-          // POST /auth/refresh — no body needed, refresh token is in HttpOnly cookie
+          // Get refresh token from store (for cross-origin Vercel + Railway)
+          const refreshToken = _getAuthStore?.()?.refreshToken || null
+          
+          // POST /auth/refresh — send refresh token in body (cross-origin) and cookie (same-origin)
           const { data } = await axios.post(
             `${API_BASE}/auth/refresh`,
-            {},
+            refreshToken ? { refresh_token: refreshToken } : {},
             { withCredentials: true }
           )
 
-          // Store new access token in Zustand memory via accessor
+          // Store new tokens in Zustand memory via accessor
           _getAuthStore?.()?.setAccessToken?.(data.access_token)
+          // Also update refresh token if rotated
+          if (data.refresh_token) {
+            _getAuthStore?.()?.refreshToken ? 
+              _getAuthStore.getState().refreshToken = data.refresh_token : null
+          }
 
-          return { access_token: data.access_token }
+          return { access_token: data.access_token, refresh_token: data.refresh_token }
         } catch (refreshErr) {
           // Refresh failed — session fully expired
           // Only redirect if we're not on a public page
@@ -157,7 +165,10 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   logout: () => api.post('/auth/logout', {}),   // no body — token in cookie
-  refresh: () => api.post('/auth/refresh', {}, { withCredentials: true }),  // refresh using HttpOnly cookie
+  refresh: (refreshToken) => api.post('/auth/refresh', 
+    refreshToken ? { refresh_token: refreshToken } : {}, 
+    { withCredentials: true }  // Send both: body (cross-origin) + cookie (same-origin)
+  ),
   me: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/me', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
