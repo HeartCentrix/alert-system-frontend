@@ -42,3 +42,6 @@ coverage/
 .cache/
 .temp/
 package-lock.json
+AUTHENTICATION_ARCHITECTURE.md
+
+# Local documentation (not for git)
