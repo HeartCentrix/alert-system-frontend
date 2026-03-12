@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Upload, Edit2, Trash2, UserCheck, UserX, ChevronLeft, ChevronRight, Eye, EyeOff, CheckSquare, Square, AlertTriangle } from 'lucide-react'
 import { useForm } from 'react-hook-form'
-import { usersAPI } from '@/services/api'
+import { usersAPI, groupsAPI } from '@/services/api'
 import { getInitials, cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import useAuthStore from '@/store/authStore'
@@ -48,12 +48,30 @@ function cleanUserData(data) {
 }
 
 function UserModal({ user, onClose, onSaved }) {
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
     defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
   })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState(null)
+
+  // Get current user for permission check
+  const { user: currentUser } = useAuthStore()
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
+
+  const queryClient = useQueryClient()
+
+  // Watch department and title values
+  const departmentValue = watch('department')
+  const titleValue = watch('title')
+
+  // Fetch filter options for Department and Title dropdowns
+  const { data: filterOptionsData } = useQuery({
+    queryKey: ['group-filter-options'], // Same key as OtherPages for shared cache
+    queryFn: () => groupsAPI.getFilterOptions().then(r => r.data),
+    staleTime: 0, // Always refetch to get latest departments/titles
+    refetchOnWindowFocus: 'always',
+  })
 
   // Reset form when user prop changes (prevents stale values on re-mount)
   useEffect(() => {
@@ -62,7 +80,7 @@ function UserModal({ user, onClose, onSaved }) {
     setGeneratedPassword(null)
     setShowPassword(false)
   }, [user, reset])
-  
+
   // Fetch locations for the dropdown
   const { data: locationsData, error: locationsError } = useQuery({
     queryKey: ['locations'],
@@ -86,18 +104,26 @@ function UserModal({ user, onClose, onSaved }) {
   const onSubmit = async (data) => {
     setLoading(true)
     try {
+      console.log('Form data:', data)
       // Clean the data to remove empty strings
       const cleanedData = cleanUserData(data)
+      console.log('Cleaned data:', cleanedData)
 
       if (user?.id) {
         await usersAPI.update(user.id, cleanedData)
+        // Invalidate and refetch filter options to include new department/title
+        await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
         toast.success('User updated')
         onSaved()
         onClose()
       } else {
         // Generate secure password if not provided
         const password = data.password || generateTempPassword()
+        console.log('Creating user with data:', { ...cleanedData, password })
         await usersAPI.create({ ...cleanedData, password })
+
+        // Invalidate and refetch filter options to include new department/title
+        await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
 
         // Show generated password if it was auto-generated
         if (!data.password) {
@@ -114,16 +140,14 @@ function UserModal({ user, onClose, onSaved }) {
       }
     } catch (error) {
       console.error('Error saving user:', error)
-      
+
       // Handle different error types
       let errorMessage = 'Error saving user'
-      
+
       if (error.response?.status === 401) {
         errorMessage = 'Session expired. Please log in again.'
-        // Clear auth data and redirect to login
-        sessionStorage.removeItem('access_token')
-        sessionStorage.removeItem('refresh_token')
-        window.location.href = '/login'
+        // Auth interceptor in api.js handles session expiry globally.
+        // The window.location redirect happens there automatically.
       } else if (error.response?.status === 403) {
         errorMessage = 'You do not have permission to perform this action.'
       } else if (error.response?.status === 422) {
@@ -300,13 +324,43 @@ function UserModal({ user, onClose, onSaved }) {
             </div>
             <div>
               <label className="label">Department (optional)</label>
-              <input {...register('department')} className="input" />
+              <input
+                list="department-options"
+                {...register('department')}
+                className="input"
+                placeholder={isAdmin ? "Select or type new department" : "Select department"}
+                onChange={(e) => {
+                  const value = e.target.value
+                  register('department').onChange(e)
+                  console.log('Department changed to:', value)
+                }}
+              />
+              <datalist id="department-options">
+                {filterOptionsData?.departments?.map(dept => (
+                  <option key={dept} value={dept} />
+                ))}
+              </datalist>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Title (optional)</label>
-              <input {...register('title')} className="input" />
+              <input
+                list="title-options"
+                {...register('title')}
+                className="input"
+                placeholder={isAdmin ? "Select or type new title" : "Select title"}
+                onChange={(e) => {
+                  const value = e.target.value
+                  register('title').onChange(e)
+                  console.log('Title changed to:', value)
+                }}
+              />
+              <datalist id="title-options">
+                {filterOptionsData?.titles?.map(title => (
+                  <option key={title} value={title} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="label">Employee ID (optional)</label>

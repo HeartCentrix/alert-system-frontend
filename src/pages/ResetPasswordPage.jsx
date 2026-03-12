@@ -6,24 +6,34 @@ import { authAPI } from '@/services/api'
 import toast from 'react-hot-toast'
 
 export default function ResetPasswordPage() {
-  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [validating, setValidating] = useState(true)
-  
-  const token = searchParams.get('token')
-  const { register, handleSubmit, formState: { errors }, watch } = useForm()
+  const [token, setToken] = useState(null)
 
+  // Get token from URL ONCE on mount - don't depend on React Router searchParams
   useEffect(() => {
-    if (!token) {
-      toast.error('Invalid or missing reset token')
-      navigate('/login')
-    } else {
+    // Use window.location directly - it's immediately available
+    const urlParams = new URLSearchParams(window.location.search)
+    const foundToken = urlParams.get('token')
+    
+    console.log('ResetPasswordPage: URL =', window.location.href)
+    console.log('ResetPasswordPage: Token =', foundToken ? `${foundToken.substring(0, 20)}...` : null)
+    
+    if (foundToken) {
+      setToken(foundToken)
       setValidating(false)
+    } else {
+      console.error('ResetPasswordPage: NO TOKEN FOUND - redirecting to login')
+      toast.error('Invalid or missing reset token')
+      navigate('/login', { replace: true })
     }
-  }, [token, navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty dependency array - run ONLY once on mount
+
+  const { register, handleSubmit, formState: { errors }, watch } = useForm()
 
   const onSubmit = async ({ new_password }) => {
     if (!token) return
@@ -34,9 +44,9 @@ export default function ResetPasswordPage() {
       toast.success('Password reset successfully! Please sign in.')
       navigate('/login')
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
+      const errorMessage = error.response?.data?.detail ||
+                          (typeof error.response?.data?.detail === 'object'
+                            ? error.response.data.detail.message
                             : 'Failed to reset password. Token may be expired.')
       toast.error(errorMessage || 'Failed to reset password. Token may be expired.')
     } finally {
@@ -44,6 +54,7 @@ export default function ResetPasswordPage() {
     }
   }
 
+  // Show loading while validating token
   if (validating) {
     return (
       <div className="min-h-screen bg-surface-950 flex items-center justify-center">
@@ -91,7 +102,7 @@ export default function ResetPasswordPage() {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                 <input
-                  {...register('new_password', { 
+                  {...register('new_password', {
                     required: 'Password is required',
                     minLength: {
                       value: 8,
@@ -127,7 +138,7 @@ export default function ResetPasswordPage() {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                 <input
-                  {...register('confirm_password', { 
+                  {...register('confirm_password', {
                     required: 'Please confirm your password',
                     validate: value => value === watch('new_password') || 'Passwords do not match'
                   })}

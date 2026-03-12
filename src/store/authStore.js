@@ -5,50 +5,43 @@ const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  accessToken: null,          // ← in memory only, never sessionStorage
+  isInitializing: false,      // Prevent duplicate init calls
   // MFA state
-  mfaState: null, // null | 'setup_required' | 'challenge_required'
+  mfaState: null,
   mfaChallengeToken: null,
   mfaQRCodeURI: null,
-  mfaSecret: null,  // Raw TOTP secret for manual entry
+  mfaSecret: null,
 
   init: async () => {
-    const token = sessionStorage.getItem('access_token')
-    if (!token) {
-      set({ isLoading: false })
-      return
-    }
+    // Prevent duplicate initialization
+    if (get().isInitializing) return
+    set({ isInitializing: true })
+
     try {
       const { data } = await authAPI.me()
-      set({ user: data, isAuthenticated: true, isLoading: false })
+      set({ user: data, isAuthenticated: true, isLoading: false, isInitializing: false })
     } catch (error) {
-      // Only clear tokens on 401 (invalid token), not on network errors
-      if (error?.response?.status === 401) {
-        sessionStorage.removeItem('access_token')
-        sessionStorage.removeItem('refresh_token')
-        set({ user: null, isAuthenticated: false, isLoading: false, mfaState: null })
-      } else {
-        // Network error or server error - keep tokens and try again later
-        set({ isLoading: false })
-      }
+      set({ user: null, isAuthenticated: false, isLoading: false, isInitializing: false, accessToken: null, mfaState: null })
     }
+  },
+
+  setAccessToken: (token) => {
+    set({ accessToken: token })
   },
 
   login: async (email, password) => {
     const { data } = await authAPI.login(email, password)
 
-    // Check response type based on status field
     if (data.status === 'mfa_required') {
-      // MFA is required - store state and let UI handle it
       if (!data.mfa_configured) {
-        // User needs to set up MFA first
         set({
           mfaState: 'setup_required',
           mfaChallengeToken: data.challenge_token,
           mfaQRCodeURI: data.qr_code_uri,
-          mfaSecret: data.secret,  // Store secret for manual entry
+          mfaSecret: data.secret,
         })
       } else {
-        // User has MFA configured - just needs to enter code
         set({
           mfaState: 'challenge_required',
           mfaChallengeToken: data.challenge_token,
@@ -58,13 +51,11 @@ const useAuthStore = create((set, get) => ({
       return data
     }
 
-    // Normal login success
-    if (!data?.access_token) {
-      throw new Error('No token received from server')
-    }
-    sessionStorage.setItem('access_token', data.access_token)
-    sessionStorage.setItem('refresh_token', data.refresh_token)
+    if (!data?.access_token) throw new Error('No token received from server')
+
+    // Store access token in memory only
     set({
+      accessToken: data.access_token,
       user: data.user,
       isAuthenticated: true,
       isLoading: false,
@@ -78,28 +69,22 @@ const useAuthStore = create((set, get) => ({
 
   verifyMFA: async (code) => {
     const { mfaChallengeToken } = get()
-    if (!mfaChallengeToken) {
-      throw new Error('No MFA challenge token available')
-    }
+    if (!mfaChallengeToken) throw new Error('No MFA challenge token available')
 
     const { data } = await authAPI.verifyMFA(mfaChallengeToken, code)
 
-    // Success - store tokens in sessionStorage
-    sessionStorage.setItem('access_token', data.access_token)
-    sessionStorage.setItem('refresh_token', data.refresh_token)
-
-    // If recovery codes are present (first-time MFA setup), don't set isAuthenticated yet
-    // The UI needs to show recovery codes modal first before marking user as authenticated
     if (data?.recovery_codes && data.recovery_codes.length > 0) {
       set({
+        accessToken: data.access_token,
         user: data.user,
-        isAuthenticated: false,  // Keep false until recovery codes are dismissed
+        isAuthenticated: false,   // Keep false until recovery codes dismissed
         mfaState: null,
         mfaChallengeToken: null,
         mfaQRCodeURI: null,
       })
     } else {
       set({
+        accessToken: data.access_token,
         user: data.user,
         isAuthenticated: true,
         mfaState: null,
@@ -112,16 +97,12 @@ const useAuthStore = create((set, get) => ({
 
   verifyMFAWithRecoveryCode: async (recoveryCode, challengeToken) => {
     const token = challengeToken || get().mfaChallengeToken
-    if (!token) {
-      throw new Error('No challenge token available')
-    }
+    if (!token) throw new Error('No challenge token available')
 
     const { data } = await authAPI.verifyMFAWithRecoveryCode(token, recoveryCode)
 
-    // Success - store tokens in sessionStorage
-    sessionStorage.setItem('access_token', data.access_token)
-    sessionStorage.setItem('refresh_token', data.refresh_token)
     set({
+      accessToken: data.access_token,
       user: data.user,
       isAuthenticated: true,
       mfaState: null,
@@ -132,7 +113,15 @@ const useAuthStore = create((set, get) => ({
   },
 
   clearMFAState: () => {
+    set({ mfaState: null, mfaChallengeToken: null, mfaQRCodeURI: null, mfaSecret: null })
+  },
+
+  logout: async () => {
+    try { await authAPI.logout() } catch {}
     set({
+      accessToken: null,
+      user: null,
+      isAuthenticated: false,
       mfaState: null,
       mfaChallengeToken: null,
       mfaQRCodeURI: null,
@@ -140,12 +129,9 @@ const useAuthStore = create((set, get) => ({
     })
   },
 
-  logout: async () => {
-    const refresh_token = sessionStorage.getItem('refresh_token')
-    try { await authAPI.logout(refresh_token) } catch {}
-    sessionStorage.removeItem('access_token')
-    sessionStorage.removeItem('refresh_token')
+  clearSession: () => {
     set({
+      accessToken: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
@@ -159,5 +145,12 @@ const useAuthStore = create((set, get) => ({
     set({ user: updatedUser })
   },
 }))
+
+// Register store accessor into api.js to break the circular import.
+// This runs once when authStore.js is first imported, after both modules
+// have fully initialised. api.js receives a getter that returns the live
+// Zustand state — it never holds a stale reference.
+import { setAuthStoreAccessor } from '@/services/api'
+setAuthStoreAccessor(() => useAuthStore.getState())
 
 export default useAuthStore

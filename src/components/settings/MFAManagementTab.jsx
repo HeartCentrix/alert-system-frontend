@@ -255,7 +255,7 @@ function MFAEnrollmentModal({ onClose, onEnrollmentComplete }) {
       const { data } = await authAPI.completeMFAEnrollment(code)
       setRecoveryCodes(data.recovery_codes)
       setStep('success')
-      onEnrollmentComplete()
+      // Don't call onEnrollmentComplete yet - wait for user to dismiss recovery codes
       toast.success('MFA enabled successfully!')
     } catch (err) {
       // Normalize error to prevent rendering raw objects
@@ -263,6 +263,11 @@ function MFAEnrollmentModal({ onClose, onEnrollmentComplete }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDismissRecoveryCodes = () => {
+    onEnrollmentComplete()
+    onClose()
   }
 
   return (
@@ -325,7 +330,7 @@ function MFAEnrollmentModal({ onClose, onEnrollmentComplete }) {
         {step === 'success' && (
           <RecoveryCodesDisplay
             codes={recoveryCodes}
-            onClose={onClose}
+            onClose={handleDismissRecoveryCodes}
           />
         )}
       </div>
@@ -566,7 +571,7 @@ function MFAResetModal({ onClose, onResetComplete }) {
       const { data } = await authAPI.completeMFAReset(code)
       setRecoveryCodes(data.recovery_codes)
       setStep('success')
-      onResetComplete()
+      // Don't call onResetComplete yet - wait for user to dismiss recovery codes
       toast.success('MFA reset successfully!')
     } catch (err) {
       // Normalize error to prevent rendering raw objects
@@ -574,6 +579,11 @@ function MFAResetModal({ onClose, onResetComplete }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDismissRecoveryCodes = () => {
+    onResetComplete()
+    onClose()
   }
 
   if (step === 'reauth') {
@@ -654,7 +664,7 @@ function MFAResetModal({ onClose, onResetComplete }) {
         <div className="bg-slate-800 rounded-xl max-w-lg w-full">
           <RecoveryCodesDisplay
             codes={recoveryCodes}
-            onClose={onClose}
+            onClose={handleDismissRecoveryCodes}
           />
         </div>
       </div>
@@ -874,6 +884,11 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
     }
   }
 
+  const handleDismissRegeneratedCodes = () => {
+    onRegenerateComplete()
+    onClose()
+  }
+
   if (codes) {
     return (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -884,7 +899,7 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
               Store these new codes securely.
             </p>
           </div>
-          <RecoveryCodesDisplay codes={codes} onClose={onRegenerateComplete} />
+          <RecoveryCodesDisplay codes={codes} onClose={handleDismissRegeneratedCodes} />
         </div>
       </div>
     )
