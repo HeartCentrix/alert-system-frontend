@@ -66,11 +66,13 @@ api.interceptors.response.use(
       return Promise.reject(err)
     }
 
-    // Skip refresh for auth endpoints that return 401 for bad credentials
+    // Skip refresh for auth endpoints - these are handled by authStore.init()
     const isAuthEndpoint =
       original?.url?.includes('/auth/login') ||
       original?.url?.includes('/auth/forgot-password') ||
-      original?.url?.includes('/auth/reset-password')
+      original?.url?.includes('/auth/reset-password') ||
+      original?.url?.includes('/auth/me') ||  // ← init() handles /auth/me refresh
+      original?.url?.includes('/auth/refresh') // ← prevent infinite loop
 
     if (isAuthEndpoint) return Promise.reject(err)
 
@@ -121,13 +123,13 @@ api.interceptors.response.use(
           // Refresh failed — session fully expired
           // Only redirect if we're not on a public page
           const currentPath = window.location.pathname
-          const isPublicPage = 
+          const isPublicPage =
             currentPath === '/login' ||
             currentPath === '/forgot-password' ||
             currentPath === '/reset-password' ||
             currentPath.startsWith('/notifications/') ||
             currentPath === '/responded'
-          
+
           if (!isPublicPage) {
             _getAuthStore?.()?.clearSession?.()
             window.location.href = '/#/login'
