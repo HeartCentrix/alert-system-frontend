@@ -104,10 +104,11 @@ const useAuthStore = create((set, get) => ({
 
     if (!data?.access_token) throw new Error('No token received from server')
 
-    // Store access token and refresh token in memory only
+    // Store access token in memory, refresh token in memory + sessionStorage (for cross-origin)
+    saveRefreshToken(data.refresh_token)
     set({
       accessToken: data.access_token,
-      refreshToken: data.refresh_token,  // Store refresh token for cross-origin (Vercel + Railway)
+      refreshToken: data.refresh_token,
       user: data.user,
       isAuthenticated: true,
       isLoading: false,
@@ -126,9 +127,10 @@ const useAuthStore = create((set, get) => ({
     const { data } = await authAPI.verifyMFA(mfaChallengeToken, code)
 
     if (data?.recovery_codes && data.recovery_codes.length > 0) {
+      saveRefreshToken(data.refresh_token)
       set({
         accessToken: data.access_token,
-        refreshToken: data.refresh_token,  // Store refresh token for cross-origin
+        refreshToken: data.refresh_token,
         user: data.user,
         isAuthenticated: false,   // Keep false until recovery codes dismissed
         mfaState: null,
@@ -136,9 +138,10 @@ const useAuthStore = create((set, get) => ({
         mfaQRCodeURI: null,
       })
     } else {
+      saveRefreshToken(data.refresh_token)
       set({
         accessToken: data.access_token,
-        refreshToken: data.refresh_token,  // Store refresh token for cross-origin
+        refreshToken: data.refresh_token,
         user: data.user,
         isAuthenticated: true,
         mfaState: null,
@@ -155,9 +158,10 @@ const useAuthStore = create((set, get) => ({
 
     const { data } = await authAPI.verifyMFAWithRecoveryCode(token, recoveryCode)
 
+    saveRefreshToken(data.refresh_token)
     set({
       accessToken: data.access_token,
-      refreshToken: data.refresh_token,  // Store refresh token for cross-origin
+      refreshToken: data.refresh_token,
       user: data.user,
       isAuthenticated: true,
       mfaState: null,
