@@ -15,6 +15,24 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        secure: false,
+        // Forward cookies (HttpOnly refresh_token, csrf_token) to backend
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            // Forward all cookies from the browser request to the backend
+            const cookie = req.headers.cookie;
+            if (cookie) {
+              proxyReq.setHeader('Cookie', cookie);
+            }
+          });
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            // Forward Set-Cookie headers from backend to browser
+            const setCookie = proxyRes.headers['set-cookie'];
+            if (setCookie) {
+              res.setHeader('set-cookie', setCookie);
+            }
+          });
+        },
       },
     },
   },

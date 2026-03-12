@@ -42,3 +42,9 @@ coverage/
 .cache/
 .temp/
 package-lock.json
+
+# Local documentation (not for git)
+AUTHENTICATION_ARCHITECTURE.md
+
+# Duplicate Vite config (keep only vite.config.js)
+vite.config.ts

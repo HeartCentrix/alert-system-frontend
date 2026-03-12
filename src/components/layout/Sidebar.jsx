@@ -25,7 +25,11 @@ const NAV = [
       pathname === '/notifications' && new URLSearchParams(search).get('status') === 'scheduled',
   },
   { label: 'INCIDENTS', header: true },
-  { label: 'Active Incidents', icon: AlertTriangle, to: '/incidents' },
+  {
+    label: 'Active Incidents', icon: AlertTriangle, to: '/incidents?status=active',
+    customActive: (pathname, search) =>
+      pathname === '/incidents' && new URLSearchParams(search).get('status') === 'active',
+  },
   { label: 'SETTINGS', header: true },
   { label: 'People', icon: Users, to: '/people' },
   { label: 'Groups', icon: Group, to: '/groups' },
@@ -91,7 +95,11 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
       )}>
         {/* Logo */}
         {sidebarOpen ? (
-          <div className="flex items-center px-4 h-14 border-b border-surface-700/60 shrink-0">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center px-4 h-14 border-b border-surface-700/60 shrink-0 hover:bg-surface-800/50 transition-colors w-full text-left"
+            title="Go to Dashboard"
+          >
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
                 <Zap size={16} className="text-white" fill="white" />
@@ -100,13 +108,17 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
                 TM Alert
               </span>
             </div>
-          </div>
+          </button>
         ) : (
-          <div className="flex flex-col items-center py-3 border-b border-surface-700/60 shrink-0">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex flex-col items-center py-3 border-b border-surface-700/60 shrink-0 hover:bg-surface-800/50 transition-colors w-full"
+            title="Go to Dashboard"
+          >
             <div className="w-11 h-11 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
               <Zap size={20} className="text-white" fill="white" />
             </div>
-          </div>
+          </button>
         )}
 
       {/* New Notification CTA */}
@@ -166,34 +178,51 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
 
       {/* User profile - sticks to bottom */}
       <div className="mt-auto p-3 border-t border-surface-700/60">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className={cn(
-                'flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors',
-                !sidebarOpen && 'justify-center'
-              )}>
-                <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                  {getInitials(user?.full_name || user?.email || 'U')}
-                </div>
-                {sidebarOpen && (
+        {sidebarOpen ? (
+          // Expanded: show avatar + name + role + logout
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    {getInitials(user?.full_name || user?.email || 'U')}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
                     <div className="text-xs text-slate-500 truncate">{user?.role?.replaceAll('_', ' ')}</div>
                   </div>
-                )}
-                {sidebarOpen ? (
-                  <button onClick={handleLogout} className="text-slate-500 hover:text-danger-400 transition-colors" title="Logout">
+                  <button 
+                    onClick={handleLogout} 
+                    className="text-slate-500 hover:text-danger-400 transition-colors" 
+                    title="Logout"
+                    aria-label="Logout"
+                  >
                     <LogOut size={15} />
                   </button>
-                ) : (
-                  <button onClick={handleLogout} className="text-slate-500 hover:text-danger-400 transition-colors" title="Logout">
-                    <LogOut size={18} />
-                  </button>
-                )}
-              </div>
-            </TooltipTrigger>
-            {!sidebarOpen && (
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+                <div className="text-center">
+                  <div className="font-medium">{user?.full_name}</div>
+                  <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          // Collapsed: show only logout button centered
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button 
+                  onClick={handleLogout} 
+                  className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-surface-800 text-slate-400 hover:text-danger-400 transition-colors"
+                  title="Logout"
+                  aria-label="Logout"
+                >
+                  <LogOut size={18} />
+                </button>
+              </TooltipTrigger>
               <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
                 <div className="text-center">
                   <div className="font-medium">{user?.full_name}</div>
@@ -201,9 +230,9 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
                   <div className="text-xs text-danger-400 mt-1">Click to logout</div>
                 </div>
               </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
     </aside>
     </div>

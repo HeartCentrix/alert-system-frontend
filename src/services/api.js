@@ -1,16 +1,20 @@
 import axios from 'axios'
 
-// Get API URL from environment variable, fallback to local for development
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,   // ← CRITICAL: sends HttpOnly cookies (refresh_token, csrf_token)
 })
 
-// Mutex for token refresh - prevents concurrent refresh requests
-// Store the refresh promise to queue concurrent requests
-let refreshPromise = null
+// ── Auth store accessor (breaks circular dependency) ──────────────────────
+// authStore.js calls setAuthStoreAccessor() after it initialises, giving api.js
+// a way to read/write auth state without importing the store directly.
+let _getAuthStore = null
+export function setAuthStoreAccessor(fn) {
+  _getAuthStore = fn
+}
 
 // Clear only auth-related items from sessionStorage (not all origin data)
 function clearAuthData() {
@@ -19,34 +23,68 @@ function clearAuthData() {
   sessionStorage.removeItem('user')
 }
 
-// Attach token on every request
+// ── CSRF helper ─────────────────────────────────────────────────────────────
+// Reads the non-HttpOnly csrf_token cookie set by the backend.
+// This proves the request comes from our page (cross-origin JS can't read cookies).
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+const CSRF_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+
+// ── Mutex for token refresh ──────────────────────────────────────────────────
+let refreshPromise = null
+
+// ── Request interceptor ──────────────────────────────────────────────────────
 api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem('access_token')
+  // Attach access token from Zustand store via accessor (breaks circular import)
+  const token = _getAuthStore?.()?.accessToken ?? null
   if (token) config.headers.Authorization = `Bearer ${token}`
+
+  // Attach CSRF token on state-changing requests
+  if (CSRF_METHODS.has(config.method?.toLowerCase())) {
+    const csrfToken = getCsrfToken()
+    if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken
+  }
+
   return config
 })
 
-// Handle 401 - refresh token or logout
+// ── Response interceptor — handle 401/403 with silent refresh ───────────────
 api.interceptors.response.use(
   (res) => res,
   async (err) => {
     const original = err.config
 
-    // Skip refresh logic for auth endpoints (login, forgot-password, reset-password)
-    // These endpoints return 401 for invalid credentials, not expired tokens
-    const isAuthEndpoint =
-      original.url?.includes('/auth/login') ||
-      original.url?.includes('/auth/forgot-password') ||
-      original.url?.includes('/auth/reset-password')
-
-    if (isAuthEndpoint) {
+    // Handle CSRF failure — page is stale, reload to get a fresh cookie
+    if (
+      err.response?.status === 403 &&
+      err.response?.data?.detail?.includes('CSRF')
+    ) {
+      window.location.reload()
       return Promise.reject(err)
     }
 
-    if (err.response?.status === 401 && !original._retry) {
-      original._retry = true
+    // Skip refresh for auth endpoints - these are handled by authStore.init()
+    const isAuthEndpoint =
+      original?.url?.includes('/auth/login') ||
+      original?.url?.includes('/auth/forgot-password') ||
+      original?.url?.includes('/auth/reset-password') ||
+      original?.url?.includes('/auth/me') ||  // ← init() handles /auth/me refresh
+      original?.url?.includes('/auth/refresh') // ← prevent infinite loop
 
-      // If refresh is in progress, wait for it to complete
+    if (isAuthEndpoint) return Promise.reject(err)
+
+    // Handle 401 or 403 "Not authenticated" (FastAPI HTTPBearer returns 403 when no Authorization header)
+    const isAuthFailure =
+      err.response?.status === 401 ||
+      (err.response?.status === 403 && err.response?.data?.detail === 'Not authenticated')
+
+    if (isAuthFailure && original?._retry !== true) {
+      if (original) original._retry = true
+
+      // Queue concurrent requests behind a single refresh
       if (refreshPromise) {
         try {
           const tokens = await refreshPromise
@@ -54,39 +92,53 @@ api.interceptors.response.use(
             original.headers.Authorization = `Bearer ${tokens.access_token}`
             return api(original)
           }
-        } catch {
-          // Refresh failed - will redirect to login
-        }
+        } catch { /* fall through to reject */ }
         return Promise.reject(err)
       }
 
-      // Start refresh process - create a promise that all concurrent requests can await
       refreshPromise = (async () => {
-        const refreshToken = sessionStorage.getItem('refresh_token')
-
-        if (!refreshToken) {
-          // Session expired - user needs to log in again
-          clearAuthData()
-          window.location.href = '/#/login'
-          throw new Error('Session expired. Please log in again.')
-        }
-
         try {
-          const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
-          const { access_token, refresh_token } = data
+          // Get refresh token from store or sessionStorage (for cross-origin Vercel + Railway)
+          const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
+          
+          // POST /auth/refresh — send refresh token in body (cross-origin) and cookie (same-origin)
+          const { data } = await axios.post(
+            `${API_BASE}/auth/refresh`,
+            refreshToken ? { refresh_token: refreshToken } : {},
+            { withCredentials: true }
+          )
 
-          // Store new tokens in sessionStorage
-          sessionStorage.setItem('access_token', access_token)
-          sessionStorage.setItem('refresh_token', refresh_token)
+          // Store new tokens in Zustand memory via accessor
+          _getAuthStore?.()?.setAccessToken?.(data.access_token)
+          // Also update refresh token if rotated (save to sessionStorage for cross-origin)
+          if (data.refresh_token) {
+            sessionStorage.setItem('refresh_token', data.refresh_token)
+            if (_getAuthStore?.()?.refreshToken !== undefined) {
+              _getAuthStore.getState().refreshToken = data.refresh_token
+            }
+          }
 
-          return { access_token, refresh_token }
+          return { access_token: data.access_token, refresh_token: data.refresh_token }
         } catch (refreshErr) {
-          // Refresh failed - clear auth data and redirect
-          clearAuthData()
-          window.location.href = '/#/login'
+          // Refresh failed — session fully expired
+          // Only redirect if we're not on a public page
+          const currentPath = window.location.pathname
+          const isPublicPage =
+            currentPath === '/login' ||
+            currentPath === '/forgot-password' ||
+            currentPath === '/reset-password' ||
+            currentPath.startsWith('/notifications/') ||
+            currentPath === '/responded'
+
+          if (!isPublicPage) {
+            _getAuthStore?.()?.clearSession?.()
+            window.location.href = '/#/login'
+          } else {
+            // On public page - just clear session, don't redirect
+            _getAuthStore?.()?.clearSession?.()
+          }
           throw refreshErr
         } finally {
-          // Reset refresh promise so future requests can refresh again
           refreshPromise = null
         }
       })()
@@ -94,43 +146,51 @@ api.interceptors.response.use(
       try {
         const tokens = await refreshPromise
         if (tokens) {
-          original.headers.Authorization = `Bearer ${tokens.access_token}`
-          return api(original)
+          // Manually set the Authorization header for the retry
+          const retryConfig = {
+            ...original,
+            headers: {
+              ...original.headers,
+              Authorization: `Bearer ${tokens.access_token}`
+            }
+          }
+          return api.request(retryConfig)
         }
       } catch (refreshErr) {
         return Promise.reject(refreshErr)
       }
     }
+
     return Promise.reject(err)
   }
 )
 
-// ─── AUTH ─────────────────────────────────────────────────────────────────────
+// ─── AUTH ────────────────────────────────────────────────────────────────────
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
-  logout: (refresh_token) => api.post('/auth/logout', { refresh_token }),
+  logout: () => api.post('/auth/logout', {}),   // no body — token in cookie
+  refresh: (refreshToken) => api.post('/auth/refresh', 
+    refreshToken ? { refresh_token: refreshToken } : {}, 
+    { withCredentials: true }  // Send both: body (cross-origin) + cookie (same-origin)
+  ),
   me: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/me', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, new_password) => api.post('/auth/reset-password', { token, new_password }),
   changePassword: (current, next) => api.post('/auth/change-password', { current_password: current, new_password: next }),
-  // MFA endpoints
   verifyMFA: (challenge_token, code) => api.post('/auth/mfa/verify-login', { challenge_token, code }),
   verifyMFAWithRecoveryCode: (challenge_token, recovery_code) => api.post('/auth/mfa/recovery-code/verify', { challenge_token, recovery_code }),
   getMFAStatus: () => api.get('/auth/mfa/status'),
   initiateMFA: () => api.post('/auth/mfa/initiate'),
   confirmMFA: (code) => api.post('/auth/mfa/confirm', { code }),
   disableMFA: (code) => api.post('/auth/mfa/disable', { code }),
-  // MFA Lifecycle endpoints (secure, with reauthentication)
   startMFAEnrollment: (current_password) => api.post('/auth/mfa/enroll/start', { current_password }),
   completeMFAEnrollment: (code) => api.post('/auth/mfa/enroll/complete', { code }),
   disableMFAWithReauth: (current_password, mfa_code) => api.post('/auth/mfa/disable', { current_password, mfa_code }),
   startMFAReset: (current_password, mfa_code) => api.post('/auth/mfa/reset/start', { current_password, mfa_code }),
   completeMFAReset: (code) => api.post('/auth/mfa/reset/complete', { code }),
-  // Recovery code endpoints
   getRecoveryCodesStatus: () => api.get('/auth/mfa/recovery-codes/status'),
   regenerateRecoveryCodes: (params) => api.post('/auth/mfa/recovery-codes/regenerate', params),
-  // params: { current_password, method: 'totp' | 'recovery_code', mfa_code?, recovery_code? }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -210,26 +270,26 @@ export const locationAudienceAPI = {
    * @param {string} [data.expires_at] - Optional expiration
    */
   assignUser: (data) => api.post('/location-audience/assign', data),
-  
+
   /**
    * Remove a user from a location
    * @param {number} userId - User ID
    * @param {number} locationId - Location ID
    * @param {string} [reason] - Removal reason
    */
-  removeUser: (userId, locationId, reason = null) => 
+  removeUser: (userId, locationId, reason = null) =>
     api.post('/location-audience/remove', { reason }, {
       params: { user_id: userId, location_id: locationId }
     }),
-  
+
   /**
    * Update user's geofence location
    * @param {number} latitude - User's latitude
    * @param {number} longitude - User's longitude
    */
-  updateGeofence: (latitude, longitude) => 
+  updateGeofence: (latitude, longitude) =>
     api.post('/location-audience/geofence/update', { latitude, longitude }),
-  
+
   /**
    * Get all members of a location
    * @param {number} locationId - Location ID
@@ -239,19 +299,19 @@ export const locationAudienceAPI = {
    * @param {string} [params.status] - Filter by status (active/inactive)
    * @param {string} [params.assignment_type] - Filter by type (manual/geofence)
    */
-  getLocationMembers: (locationId, params = {}) => 
+  getLocationMembers: (locationId, params = {}) =>
     api.get(`/location-audience/location/${locationId}/members`, { params }),
-  
+
   /**
    * Get all locations for a user
    * @param {number} userId - User ID
    * @param {boolean} [includeInactive] - Include inactive assignments
    */
-  getUserLocations: (userId, includeInactive = false) => 
+  getUserLocations: (userId, includeInactive = false) =>
     api.get(`/location-audience/user/${userId}/locations`, {
       params: { include_inactive: includeInactive }
     }),
-  
+
   /**
    * Get location membership history
    * @param {number} locationId - Location ID
@@ -260,9 +320,9 @@ export const locationAudienceAPI = {
    * @param {number} [params.page_size] - Items per page
    * @param {string} [params.action] - Filter by action type
    */
-  getLocationHistory: (locationId, params = {}) => 
+  getLocationHistory: (locationId, params = {}) =>
     api.get(`/location-audience/location/${locationId}/history`, { params }),
-  
+
   /**
    * Get location audience statistics
    */
@@ -295,7 +355,13 @@ export const notificationsAPI = {
   cancel: (id) => api.post(`/notifications/${id}/cancel`),
   delivery: (id, params) => api.get(`/notifications/${id}/delivery`, { params }),
   responses: (id) => api.get(`/notifications/${id}/responses`),
-  respond: (id, data) => api.post(`/notifications/${id}/respond`, data),
+  respond: (id, data, token) => {
+    // Pass token directly as parameter - no localStorage storage
+    // Token is only used for this single request
+    return api.post(`/notifications/${id}/respond`, data, {
+      params: { token }
+    })
+  },
 }
 
 export default api

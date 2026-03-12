@@ -8,7 +8,7 @@ import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import DashboardPage from '@/pages/DashboardPage'
 import NewNotificationPage from '@/pages/NewNotificationPage'
-import { NotificationsListPage, NotificationDetailPage } from '@/pages/NotificationsPage'
+import { NotificationsListPage, NotificationDetailPage, SafetyRespondPage, RespondedSuccessPage } from '@/pages/NotificationsPage'
 import PeoplePage from '@/pages/PeoplePage'
 import { GroupsPage, LocationsPage, TemplatesPage, IncidentsPage } from '@/pages/OtherPages'
 import LocationMembersPage from '@/pages/LocationMembersPage'
@@ -34,12 +34,11 @@ export default function App() {
   const { init, isAuthenticated, isLoading } = useAuthStore()
 
   useEffect(() => {
-    console.log('[App] Initializing auth, current state:', { isAuthenticated, isLoading })
     init()
   }, [init])
 
   useEffect(() => {
-    console.log('[App] Auth state changed:', { isAuthenticated, isLoading })
+    // Auth state change tracking removed for security
   }, [isAuthenticated, isLoading])
 
   return (
@@ -48,6 +47,9 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Public routes for safety response (from email/SMS links) */}
+        <Route path="/notifications/:id/respond" element={<SafetyRespondPage />} />
+        <Route path="/responded" element={<RespondedSuccessPage />} />
         <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />

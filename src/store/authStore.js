@@ -1,62 +1,109 @@
 import { create } from 'zustand'
 import { authAPI } from '@/services/api'
 
+// Helper functions for sessionStorage (survives page reload, cleared on tab close)
+// This is required for cross-origin deployments (Vercel + Railway) where cookies don't work
+const saveRefreshToken = (token) => {
+  if (token) {
+    sessionStorage.setItem('refresh_token', token)
+  }
+}
+
+const getRefreshToken = () => {
+  return sessionStorage.getItem('refresh_token')
+}
+
+const clearRefreshToken = () => {
+  sessionStorage.removeItem('refresh_token')
+}
+
 const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  accessToken: null,          // ← in memory only
+  refreshToken: null,         // ← in memory + sessionStorage (for cross-origin Vercel + Railway)
+  isInitializing: false,      // Prevent duplicate init calls
   // MFA state
-  mfaState: null, // null | 'setup_required' | 'challenge_required'
+  mfaState: null,
   mfaChallengeToken: null,
   mfaQRCodeURI: null,
-  mfaSecret: null,  // Raw TOTP secret for manual entry
+  mfaSecret: null,
 
   init: async () => {
-    const token = sessionStorage.getItem('access_token')
-    if (!token) {
-      set({ isLoading: false })
-      return
-    }
+    // Prevent duplicate initialization
+    if (get().isInitializing) return
+    set({ isInitializing: true })
+    console.log('[authStore.init] Starting initialization...')
+
     try {
+      // First, try to get user info (access token might still be in memory)
+      console.log('[authStore.init] Calling /auth/me...')
       const { data } = await authAPI.me()
-      set({ user: data, isAuthenticated: true, isLoading: false })
+      console.log('[authStore.init] /auth/me succeeded, user:', data.email)
+      set({ user: data, isAuthenticated: true, isLoading: false, isInitializing: false })
     } catch (error) {
-      console.error('Auth init failed:', error?.response?.status, error?.response?.data)
-      // Only clear tokens on 401 (invalid token), not on network errors
-      if (error?.response?.status === 401) {
-        sessionStorage.removeItem('access_token')
-        sessionStorage.removeItem('refresh_token')
-        set({ user: null, isAuthenticated: false, isLoading: false, mfaState: null })
-      } else {
-        // Network error or server error - keep tokens and try again later
-        set({ isLoading: false })
+      console.log('[authStore.init] /auth/me failed with status:', error?.response?.status)
+      // If /me fails (likely 401/403 due to missing access token after refresh),
+      // try to refresh the access token using the refresh token
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        try {
+          // Get refresh token from sessionStorage (survives page reload for cross-origin)
+          const refreshTokenFromStorage = getRefreshToken()
+          console.log('[authStore.init] Refresh token from sessionStorage:', refreshTokenFromStorage ? 'present' : 'missing')
+
+          // Attempt silent refresh using refresh token (body or cookie)
+          console.log('[authStore.init] Calling /auth/refresh...')
+          const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
+          console.log('[authStore.init] /auth/refresh succeeded')
+
+          // If refresh succeeds, store the new tokens and fetch user info
+          if (refreshData?.access_token) {
+            // Save new refresh token to sessionStorage if rotated
+            if (refreshData.refresh_token) {
+              saveRefreshToken(refreshData.refresh_token)
+              console.log('[authStore.init] Saved new refresh_token to sessionStorage')
+            }
+            set({
+              accessToken: refreshData.access_token,
+              refreshToken: refreshData.refresh_token || refreshTokenFromStorage,
+            })
+            console.log('[authStore.init] Calling /auth/me after refresh...')
+            const { data: userData } = await authAPI.me()
+            console.log('[authStore.init] /auth/me succeeded after refresh, user:', userData.email)
+            set({ user: userData, isAuthenticated: true, isLoading: false, isInitializing: false })
+            return
+          }
+        } catch (refreshError) {
+          // Refresh failed - session truly expired, clear everything
+          console.log('[authStore.init] Session refresh failed, clearing session', refreshError)
+          clearRefreshToken()
+        }
       }
+
+      // Either not a 401/403 error, or refresh also failed - clear session
+      console.log('[authStore.init] Clearing session and marking as not authenticated')
+      clearRefreshToken()
+      set({ user: null, isAuthenticated: false, isLoading: false, isInitializing: false, accessToken: null, refreshToken: null, mfaState: null })
     }
+  },
+
+  setAccessToken: (token) => {
+    set({ accessToken: token })
   },
 
   login: async (email, password) => {
     const { data } = await authAPI.login(email, password)
-    
-    console.log('[AuthStore] Login response:', data)
-    console.log('[AuthStore] Response status:', data?.status)
-    console.log('[AuthStore] Response mfa_configured:', data?.mfa_configured)
-    
-    // Check response type based on status field
+
     if (data.status === 'mfa_required') {
-      console.log('[AuthStore] MFA required flow')
-      // MFA is required - store state and let UI handle it
       if (!data.mfa_configured) {
-        console.log('[AuthStore] Setting up MFA setup state')
-        // User needs to set up MFA first
         set({
           mfaState: 'setup_required',
           mfaChallengeToken: data.challenge_token,
           mfaQRCodeURI: data.qr_code_uri,
-          mfaSecret: data.secret,  // Store secret for manual entry
+          mfaSecret: data.secret,
         })
       } else {
-        console.log('[AuthStore] Setting up MFA challenge state')
-        // User has MFA configured - just needs to enter code
         set({
           mfaState: 'challenge_required',
           mfaChallengeToken: data.challenge_token,
@@ -65,15 +112,14 @@ const useAuthStore = create((set, get) => ({
       }
       return data
     }
-    
-    // Normal login success
-    console.log('[AuthStore] Normal login success')
-    if (!data?.access_token) {
-      throw new Error('No token received from server')
-    }
-    sessionStorage.setItem('access_token', data.access_token)
-    sessionStorage.setItem('refresh_token', data.refresh_token)
+
+    if (!data?.access_token) throw new Error('No token received from server')
+
+    // Store access token in memory, refresh token in memory + sessionStorage (for cross-origin)
+    saveRefreshToken(data.refresh_token)
     set({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
       user: data.user,
       isAuthenticated: true,
       isLoading: false,
@@ -87,37 +133,46 @@ const useAuthStore = create((set, get) => ({
 
   verifyMFA: async (code) => {
     const { mfaChallengeToken } = get()
-    if (!mfaChallengeToken) {
-      throw new Error('No MFA challenge token available')
-    }
+    if (!mfaChallengeToken) throw new Error('No MFA challenge token available')
 
     const { data } = await authAPI.verifyMFA(mfaChallengeToken, code)
 
-    // Success - store tokens in sessionStorage
-    sessionStorage.setItem('access_token', data.access_token)
-    sessionStorage.setItem('refresh_token', data.refresh_token)
-    set({
-      user: data.user,
-      isAuthenticated: true,
-      mfaState: null,
-      mfaChallengeToken: null,
-      mfaQRCodeURI: null,
-    })
+    if (data?.recovery_codes && data.recovery_codes.length > 0) {
+      saveRefreshToken(data.refresh_token)
+      set({
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        user: data.user,
+        isAuthenticated: false,   // Keep false until recovery codes dismissed
+        mfaState: null,
+        mfaChallengeToken: null,
+        mfaQRCodeURI: null,
+      })
+    } else {
+      saveRefreshToken(data.refresh_token)
+      set({
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        user: data.user,
+        isAuthenticated: true,
+        mfaState: null,
+        mfaChallengeToken: null,
+        mfaQRCodeURI: null,
+      })
+    }
     return data
   },
 
   verifyMFAWithRecoveryCode: async (recoveryCode, challengeToken) => {
     const token = challengeToken || get().mfaChallengeToken
-    if (!token) {
-      throw new Error('No challenge token available')
-    }
+    if (!token) throw new Error('No challenge token available')
 
     const { data } = await authAPI.verifyMFAWithRecoveryCode(token, recoveryCode)
 
-    // Success - store tokens in sessionStorage
-    sessionStorage.setItem('access_token', data.access_token)
-    sessionStorage.setItem('refresh_token', data.refresh_token)
+    saveRefreshToken(data.refresh_token)
     set({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
       user: data.user,
       isAuthenticated: true,
       mfaState: null,
@@ -128,7 +183,16 @@ const useAuthStore = create((set, get) => ({
   },
 
   clearMFAState: () => {
+    set({ mfaState: null, mfaChallengeToken: null, mfaQRCodeURI: null, mfaSecret: null })
+  },
+
+  logout: async () => {
+    try { await authAPI.logout() } catch {}
+    clearRefreshToken()
     set({
+      accessToken: null,
+      user: null,
+      isAuthenticated: false,
       mfaState: null,
       mfaChallengeToken: null,
       mfaQRCodeURI: null,
@@ -136,12 +200,10 @@ const useAuthStore = create((set, get) => ({
     })
   },
 
-  logout: async () => {
-    const refresh_token = sessionStorage.getItem('refresh_token')
-    try { await authAPI.logout(refresh_token) } catch {}
-    sessionStorage.removeItem('access_token')
-    sessionStorage.removeItem('refresh_token')
+  clearSession: () => {
+    clearRefreshToken()
     set({
+      accessToken: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
@@ -155,5 +217,12 @@ const useAuthStore = create((set, get) => ({
     set({ user: updatedUser })
   },
 }))
+
+// Register store accessor into api.js to break the circular import.
+// This runs once when authStore.js is first imported, after both modules
+// have fully initialised. api.js receives a getter that returns the live
+// Zustand state — it never holds a stale reference.
+import { setAuthStoreAccessor } from '@/services/api'
+setAuthStoreAccessor(() => useAuthStore.getState())
 
 export default useAuthStore

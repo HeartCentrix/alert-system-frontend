@@ -93,7 +93,7 @@ export default function DashboardPage() {
         </div>
         <button
           onClick={() => navigate('/notifications/new')}
-          className="btn-danger gap-2"
+          className="btn-primary gap-2"
         >
           <Bell size={15} />
           + New Notification
@@ -118,7 +118,7 @@ export default function DashboardPage() {
           icon={AlertTriangle} label="Active Incidents" color="red"
           value={stats?.active_incidents ?? 0}
           sub="Requiring attention"
-          onClick={() => navigate('/incidents')}
+          onClick={() => navigate('/incidents?status=active')}
         />
         <StatCard
           icon={Bell} label="Sent Today" color="orange"
@@ -206,7 +206,7 @@ export default function DashboardPage() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display font-semibold text-white">Active Incidents</h2>
-              <button onClick={() => navigate('/incidents')} className="text-xs text-primary-400 hover:underline">
+              <button onClick={() => navigate('/incidents?status=active')} className="text-xs text-primary-400 hover:underline">
                 View all
               </button>
             </div>
@@ -220,7 +220,7 @@ export default function DashboardPage() {
               {incidents.slice(0, 4).map(inc => (
                 <div
                   key={inc.id}
-                  onClick={() => navigate(`/incidents`)}
+                  onClick={() => navigate('/incidents?status=active')}
                   className="p-3 rounded-lg bg-surface-800/50 hover:bg-surface-800 cursor-pointer transition-colors border border-surface-700/30"
                 >
                   <div className="flex items-center gap-2 mb-1">

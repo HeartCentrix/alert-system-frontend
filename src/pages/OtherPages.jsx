@@ -1,26 +1,28 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus, X, Search, AlertCircle } from 'lucide-react'
+import { Plus, Edit2, Trash2, MapPin, Users, FileText, AlertTriangle, CheckCircle, UserPlus, X, Search, AlertCircle, ChevronRight, ChevronLeft } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { groupsAPI, locationsAPI, templatesAPI, incidentsAPI, usersAPI } from '@/services/api'
 import { cn, timeAgo, severityColor } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import LocationAutocompleteInput from '@/components/LocationAutocompleteInput'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
 import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
 function GroupModal({ group, onClose, onSaved }) {
-  const { register, handleSubmit, reset, watch, setValue } = useForm({ 
-    defaultValues: group || { type: 'static', dynamic_filter: {} } 
+  const { register, handleSubmit, reset, watch, setValue } = useForm({
+    defaultValues: group || { type: 'static', dynamic_filter: {} }
   })
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewData, setPreviewData] = useState(null)
   const [filterOptions, setFilterOptions] = useState({ departments: [], titles: [], roles: [] })
-  
+
+  const queryClient = useQueryClient()
+
   const type = watch('type')
   const dynamicFilter = watch('dynamic_filter')
 
@@ -29,7 +31,8 @@ function GroupModal({ group, onClose, onSaved }) {
     queryKey: ['group-filter-options'],
     queryFn: () => groupsAPI.getFilterOptions().then(r => r.data),
     enabled: type === 'dynamic',
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0, // Always refetch to get latest departments/titles
+    refetchOnWindowFocus: 'always',
   })
 
   // Reset form when group prop changes (prevents stale values on re-mount)
@@ -48,11 +51,18 @@ function GroupModal({ group, onClose, onSaved }) {
   // Preview dynamic group members
   const handlePreview = async () => {
     const filter = dynamicFilter || {}
-    if (!filter.department && !filter.title && !filter.role && !filter.location_id) {
+    // Check if at least one filter has a real value (not empty string, null, or undefined)
+    const hasValidFilter = (
+      (filter.department && filter.department.trim() !== '') ||
+      (filter.title && filter.title.trim() !== '') ||
+      (filter.role && filter.role.trim() !== '')
+    )
+
+    if (!hasValidFilter) {
       toast.error('Please select at least one filter criteria')
       return
     }
-    
+
     setPreviewLoading(true)
     try {
       const response = await groupsAPI.preview({
@@ -63,9 +73,9 @@ function GroupModal({ group, onClose, onSaved }) {
       setPreviewData(response.data)
       toast.success(`Found ${response.data.member_count} matching users`)
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
+      const errorMessage = error.response?.data?.detail ||
+                          (typeof error.response?.data?.detail === 'object'
+                            ? error.response.data.detail.message
                             : 'Error previewing group')
       toast.error(errorMessage || 'Error previewing group')
     } finally {
@@ -73,13 +83,20 @@ function GroupModal({ group, onClose, onSaved }) {
     }
   }
 
-  // Set dynamic filter value
+  // Set dynamic filter value - use null for empty values instead of empty string
   const updateDynamicFilter = (field, value) => {
     const current = dynamicFilter || {}
-    const updated = { ...current, [field]: value || undefined }
-    // Clean up undefined values
-    const cleaned = Object.fromEntries(Object.entries(updated).filter(([_, v]) => v !== undefined))
-    setValue('dynamic_filter', cleaned)
+    const updated = { ...current }
+    
+    // Only set the field if value is truthy and not empty string
+    if (value && value.trim() !== '') {
+      updated[field] = value
+    } else {
+      // Remove the field entirely instead of setting to empty string
+      delete updated[field]
+    }
+    
+    setValue('dynamic_filter', updated)
     setPreviewData(null) // Clear preview when filter changes
   }
 
@@ -91,10 +108,12 @@ function GroupModal({ group, onClose, onSaved }) {
         data.dynamic_filter = {}
       }
       group ? await groupsAPI.update(group.id, data) : await groupsAPI.create(data)
+      // Invalidate and refetch filter options to refresh the cached data
+      await queryClient.invalidateQueries({ queryKey: ['group-filter-options'], refetchType: 'all' })
       toast.success(group ? 'Group updated' : 'Group created')
       onSaved(); onClose()
-    } catch (err) { 
-      toast.error(err.response?.data?.detail || 'Error saving group') 
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error saving group')
     }
     finally { setLoading(false) }
   }
@@ -132,40 +151,44 @@ function GroupModal({ group, onClose, onSaved }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label text-xs">Department</label>
-                  <select 
-                    className="select text-sm"
+                  <input
+                    list="group-dept-options"
+                    className="input text-sm"
+                    placeholder="Select or type department"
                     value={dynamicFilter?.department || ''}
                     onChange={(e) => updateDynamicFilter('department', e.target.value)}
-                  >
-                    <option value="">All Departments</option>
+                  />
+                  <datalist id="group-dept-options">
                     {filterOptions.departments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
+                      <option key={dept} value={dept} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
-                
+
                 <div>
                   <label className="label text-xs">Title</label>
-                  <select 
-                    className="select text-sm"
+                  <input
+                    list="group-title-options"
+                    className="input text-sm"
+                    placeholder="Select or type title"
                     value={dynamicFilter?.title || ''}
                     onChange={(e) => updateDynamicFilter('title', e.target.value)}
-                  >
-                    <option value="">All Titles</option>
+                  />
+                  <datalist id="group-title-options">
                     {filterOptions.titles.map(title => (
-                      <option key={title} value={title}>{title}</option>
+                      <option key={title} value={title} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
-                
+
                 <div>
                   <label className="label text-xs">Role</label>
-                  <select 
+                  <select
                     className="select text-sm"
                     value={dynamicFilter?.role || ''}
                     onChange={(e) => updateDynamicFilter('role', e.target.value)}
                   >
-                    <option value="">All Roles</option>
+                    <option value="">Select role</option>
                     {filterOptions.roles.map(role => (
                       <option key={role} value={role}>{role.replace('_', ' ')}</option>
                     ))}
@@ -1030,6 +1053,8 @@ export function TemplatesPage() {
 export function IncidentsPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'all')
   const isVisible = useIsDocumentVisible()
   const { data: incidentsData, isLoading } = useQuery({
     queryKey: ['incidents'],
@@ -1037,6 +1062,31 @@ export function IncidentsPage() {
     refetchInterval: isVisible ? 30000 : false,
   })
   const incidents = incidentsData || []
+
+  // Filter incidents based on selected tab
+  const filteredIncidents = statusFilter === 'all' 
+    ? incidents 
+    : incidents.filter(i => i.status === statusFilter)
+
+  // Count by status
+  const counts = {
+    all: incidents.length,
+    active: incidents.filter(i => i.status === 'active').length,
+    monitoring: incidents.filter(i => i.status === 'monitoring').length,
+    resolved: incidents.filter(i => i.status === 'resolved').length,
+    cancelled: incidents.filter(i => i.status === 'cancelled').length,
+  }
+
+  // Sync status filter with URL params
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams)
+    if (statusFilter === 'all') {
+      params.delete('status')
+    } else {
+      params.set('status', statusFilter)
+    }
+    setSearchParams(params, { replace: true })
+  }, [statusFilter])
 
   function IncidentModal({ incident, onClose }) {
     const { register, handleSubmit, reset } = useForm({ defaultValues: incident || { severity: 'medium' } })
@@ -1091,7 +1141,7 @@ export function IncidentsPage() {
               <div>
                 <label className="label">Status</label>
                 <select {...register('status')} className="select">
-                  {['active', 'monitoring', 'resolved'].map(s => <option key={s} value={s}>{s}</option>)}
+                  {['active', 'monitoring', 'resolved', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             )}
@@ -1106,54 +1156,105 @@ export function IncidentsPage() {
     )
   }
 
-  const active = incidents.filter(i => i.status === 'active')
-  const resolved = incidents.filter(i => i.status === 'resolved')
+  const statusTabs = [
+    { key: 'all', label: 'All' },
+    { key: 'active', label: 'Active' },
+    { key: 'monitoring', label: 'Monitoring' },
+    { key: 'resolved', label: 'Resolved' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ]
 
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Incidents</h1>
-          <p className="text-slate-500 text-sm">{active.length} active · {resolved.length} resolved</p>
+          <p className="text-slate-500 text-sm">
+            {counts.active} active · {counts.monitoring} monitoring · {counts.resolved} resolved · {counts.cancelled} cancelled
+          </p>
         </div>
-        <button onClick={() => setModal('create')} className="btn-danger"><Plus size={14} /> New Incident</button>
+        <button onClick={() => setModal('create')} className="btn-primary">
+          <AlertTriangle size={14} /> + New Incident
+        </button>
       </div>
-      <div className="space-y-3">
-        {isLoading && <div className="text-center py-10 text-slate-500">Loading...</div>}
-        {!isLoading && incidents.length === 0 && (
-          <div className="card p-12 text-center">
-            <CheckCircle size={32} className="text-success-500 mx-auto mb-3" />
-            <div className="text-slate-400 font-medium">No incidents</div>
-            <div className="text-sm text-slate-500">All clear</div>
-          </div>
-        )}
-        {incidents.map(inc => (
-          <div key={inc.id} className={cn(
-            'card p-5 flex items-start gap-4 transition-all cursor-pointer hover:border-surface-500',
-            inc.status === 'active' && 'border-danger-600/40'
-          )} onClick={() => setModal(inc)}>
-            <div className={cn(
-              'w-10 h-10 rounded-lg flex items-center justify-center shrink-0',
-              inc.severity === 'high' ? 'bg-danger-600/20' :
-              inc.severity === 'medium' ? 'bg-warning-600/20' : 'bg-surface-700'
-            )}>
-              <AlertTriangle size={18} className={
-                inc.severity === 'high' ? 'text-danger-400' :
-                inc.severity === 'medium' ? 'text-warning-400' : 'text-slate-400'
-              } />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={severityColor(inc.severity)}>{inc.severity}</span>
-                <span className={inc.status === 'active' ? 'badge-red' : 'badge-green'}>{inc.status}</span>
-                {inc.type && <span className="badge-gray">{inc.type}</span>}
-              </div>
-              <h3 className="font-semibold text-slate-200">{inc.title}</h3>
-              {inc.description && <p className="text-xs text-slate-500 mt-0.5 truncate">{inc.description}</p>}
-            </div>
-            <div className="text-xs text-slate-500 shrink-0">{timeAgo(inc.created_at)}</div>
-          </div>
+
+      {/* Status Filter Tabs */}
+      <div className="flex gap-1 p-1 bg-surface-900 rounded-lg border border-surface-700/60 w-fit">
+        {statusTabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setStatusFilter(tab.key)}
+            className={cn(
+              'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+              statusFilter === tab.key
+                ? 'bg-surface-700 text-white'
+                : 'text-slate-500 hover:text-slate-300'
+            )}
+          >
+            {tab.label} ({counts[tab.key]})
+          </button>
         ))}
+      </div>
+
+      <div className="card overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-surface-700/60">
+              <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-5 py-3">Incident</th>
+              <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Status</th>
+              <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Severity</th>
+              <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Type</th>
+              <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Created</th>
+              <th className="px-3 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && (
+              <tr><td colSpan={6} className="text-center py-12 text-slate-500">Loading...</td></tr>
+            )}
+            {!isLoading && filteredIncidents.length === 0 && (
+              <tr><td colSpan={6} className="text-center py-12 text-slate-500 text-sm">
+                {statusFilter === 'all' ? 'No incidents' : `No ${statusFilter} incidents`}
+              </td></tr>
+            )}
+            {filteredIncidents.map(inc => (
+              <tr
+                key={inc.id}
+                className={cn(
+                  'table-row cursor-pointer',
+                  inc.status === 'active' && 'hover:bg-danger-900/10'
+                )}
+                onClick={() => setModal(inc)}
+              >
+                <td className="px-5 py-3.5">
+                  <div className="font-medium text-slate-200 text-sm">{inc.title}</div>
+                  <div className="text-xs text-slate-500 truncate max-w-xs mt-0.5">
+                    {inc.description?.slice(0, 80) || 'No description'}
+                  </div>
+                </td>
+                <td className="px-3 py-3.5">
+                  <span className={cn(
+                    'px-2 py-0.5 rounded text-xs font-medium',
+                    inc.status === 'active' ? 'bg-danger-500/20 text-danger-400' :
+                    inc.status === 'monitoring' ? 'bg-warning-500/20 text-warning-400' :
+                    inc.status === 'resolved' ? 'bg-success-500/20 text-success-400' :
+                    'bg-slate-500/20 text-slate-400'
+                  )}>{inc.status}</span>
+                </td>
+                <td className="px-3 py-3.5">
+                  <span className={severityColor(inc.severity)}>{inc.severity}</span>
+                </td>
+                <td className="px-3 py-3.5 text-sm text-slate-400">
+                  {inc.type || '—'}
+                </td>
+                <td className="px-3 py-3.5 text-xs text-slate-500">{timeAgo(inc.created_at)}</td>
+                <td className="px-3 py-3.5">
+                  <ChevronRight size={14} className="text-slate-600" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       {modal && <IncidentModal incident={modal === 'create' ? null : modal} onClose={() => setModal(null)} />}
     </div>

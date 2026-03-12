@@ -112,9 +112,19 @@ function Step2({ form }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null)
 
   const applyTemplate = (t) => {
-    setSelectedTemplate(t.id)
-    form.setValue('message', t.body)
-    if (t.subject) form.setValue('subject', t.subject)
+    if (selectedTemplate === t.id) {
+      // Deselect: clear the template and reset fields
+      setSelectedTemplate(null)
+      form.setValue('message', '')
+      form.setValue('subject', '')
+      toast.success('Template cleared - compose your custom message')
+    } else {
+      // Select new template
+      setSelectedTemplate(t.id)
+      form.setValue('message', t.body)
+      if (t.subject) form.setValue('subject', t.subject)
+      toast.success(`Template "${t.name}" applied`)
+    }
   }
 
   return (
@@ -126,7 +136,19 @@ function Step2({ form }) {
 
       {templates?.length > 0 && (
         <div>
-          <label className="label">Use a template</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="label mb-0">Use a template</label>
+            {selectedTemplate && (
+              <button
+                type="button"
+                onClick={() => applyTemplate({ id: selectedTemplate })}
+                className="text-xs text-danger-400 hover:text-danger-300 transition-colors flex items-center gap-1"
+                title="Clear selected template"
+              >
+                <span>✕</span> Clear template
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {templates.map(t => (
               <button
@@ -402,14 +424,43 @@ function Step4({ form }) {
         )}
       </div>
 
-      {/* Schedule */}
-      <div>
+      {/* Schedule with Timezone */}
+      <div className="space-y-2">
         <label className="label">Schedule (optional — blank = send immediately)</label>
-        <input
-          {...form.register('scheduled_at')}
-          type="datetime-local"
-          className="input w-64"
-        />
+        <div className="flex gap-3 items-center">
+          <input
+            {...form.register('scheduled_at')}
+            type="datetime-local"
+            className="input flex-1"
+          />
+          <select
+            {...form.register('scheduled_timezone')}
+            className="select w-64"
+            defaultValue="UTC"
+          >
+            <option value="">Select timezone...</option>
+            <option value="UTC">UTC (Coordinated Universal Time)</option>
+            <option value="America/New_York">Eastern Time (US & Canada)</option>
+            <option value="America/Chicago">Central Time (US & Canada)</option>
+            <option value="America/Denver">Mountain Time (US & Canada)</option>
+            <option value="America/Los_Angeles">Pacific Time (US & Canada)</option>
+            <option value="America/Anchorage">Alaska</option>
+            <option value="Pacific/Honolulu">Hawaii</option>
+            <option value="Europe/London">London (GMT/BST)</option>
+            <option value="Europe/Paris">Paris (CET)</option>
+            <option value="Europe/Berlin">Berlin (CET)</option>
+            <option value="Asia/Kolkata">India (IST)</option>
+            <option value="Asia/Shanghai">China (CST)</option>
+            <option value="Asia/Tokyo">Tokyo (JST)</option>
+            <option value="Asia/Singapore">Singapore (SGT)</option>
+            <option value="Australia/Sydney">Sydney (AEDT)</option>
+            <option value="Pacific/Auckland">Auckland (NZDT)</option>
+          </select>
+        </div>
+        <p className="text-xs text-slate-500">
+          The notification will fire at the selected local time in the chosen timezone.
+          Times are stored as UTC in the database.
+        </p>
       </div>
     </div>
   )
@@ -444,7 +495,10 @@ function Step5({ form }) {
           <ReviewRow label="Response Required" value={`Yes — ${v.response_deadline_minutes || 30} min deadline`} />
         )}
         {v.scheduled_at && (
-          <ReviewRow label="Scheduled For" value={new Date(v.scheduled_at).toLocaleString()} />
+          <ReviewRow 
+            label="Scheduled For" 
+            value={`${new Date(v.scheduled_at).toLocaleString()} ${v.scheduled_timezone ? `(${v.scheduled_timezone})` : '(UTC)'}`} 
+          />
         )}
       </div>
 
@@ -487,6 +541,7 @@ export default function NewNotificationPage() {
       response_required: false,
       response_deadline_minutes: 30,
       scheduled_at: '',
+      scheduled_timezone: 'UTC',
       slack_webhook_url: '',
       teams_webhook_url: '',
     }
@@ -532,6 +587,7 @@ export default function NewNotificationPage() {
         response_required: v.response_required,
         response_deadline_minutes: v.response_required ? v.response_deadline_minutes : undefined,
         scheduled_at: v.scheduled_at || undefined,
+        scheduled_timezone: v.scheduled_timezone || undefined,
         slack_webhook_url: v.slack_webhook_url || undefined,
         teams_webhook_url: v.teams_webhook_url || undefined,
         incident_type: v.incident_type || undefined,
