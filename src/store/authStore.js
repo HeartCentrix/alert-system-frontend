@@ -6,6 +6,7 @@ const useAuthStore = create((set, get) => ({
   isAuthenticated: false,
   isLoading: true,
   accessToken: null,          // ← in memory only, never sessionStorage
+  refreshToken: null,         // ← in memory only (for cross-origin: Vercel + Railway)
   isInitializing: false,      // Prevent duplicate init calls
   // MFA state
   mfaState: null,
@@ -24,15 +25,21 @@ const useAuthStore = create((set, get) => ({
       set({ user: data, isAuthenticated: true, isLoading: false, isInitializing: false })
     } catch (error) {
       // If /me fails (likely 401/403 due to missing access token after refresh),
-      // try to refresh the access token using the HttpOnly refresh token cookie
+      // try to refresh the access token using the refresh token
       if (error?.response?.status === 401 || error?.response?.status === 403) {
         try {
-          // Attempt silent refresh using refresh token cookie
-          const { data: refreshData } = await authAPI.refresh()
+          // Get refresh token from memory (cross-origin) or rely on cookie (same-origin)
+          const storedRefreshToken = get().refreshToken
+          
+          // Attempt silent refresh using refresh token
+          const { data: refreshData } = await authAPI.refresh(storedRefreshToken)
           
           // If refresh succeeds, store the new access token and fetch user info
           if (refreshData?.access_token) {
-            set({ accessToken: refreshData.access_token })
+            set({ 
+              accessToken: refreshData.access_token,
+              refreshToken: refreshData.refresh_token || storedRefreshToken  // Store new refresh token if provided
+            })
             const { data: userData } = await authAPI.me()
             set({ user: userData, isAuthenticated: true, isLoading: false, isInitializing: false })
             return
@@ -44,7 +51,7 @@ const useAuthStore = create((set, get) => ({
       }
       
       // Either not a 401/403 error, or refresh also failed - clear session
-      set({ user: null, isAuthenticated: false, isLoading: false, isInitializing: false, accessToken: null, mfaState: null })
+      set({ user: null, isAuthenticated: false, isLoading: false, isInitializing: false, accessToken: null, refreshToken: null, mfaState: null })
     }
   },
 
@@ -75,9 +82,10 @@ const useAuthStore = create((set, get) => ({
 
     if (!data?.access_token) throw new Error('No token received from server')
 
-    // Store access token in memory only
+    // Store tokens in memory only (for cross-origin: Vercel + Railway)
     set({
       accessToken: data.access_token,
+      refreshToken: data.refresh_token,  // Store refresh token from response body
       user: data.user,
       isAuthenticated: true,
       isLoading: false,
@@ -142,6 +150,7 @@ const useAuthStore = create((set, get) => ({
     try { await authAPI.logout() } catch {}
     set({
       accessToken: null,
+      refreshToken: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
@@ -154,6 +163,7 @@ const useAuthStore = create((set, get) => ({
   clearSession: () => {
     set({
       accessToken: null,
+      refreshToken: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
