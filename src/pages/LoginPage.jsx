@@ -297,7 +297,7 @@ export default function LoginPage() {
 
   // Render normal login form
   return (
-    <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4"
+    <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4 sm:p-6"
       style={{ backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.15) 0%, transparent 70%)' }}>
 
       {/* Grid background */}
@@ -306,17 +306,17 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md animate-fade-in">
         {/* Logo */}
-        <div className="flex items-center gap-3 justify-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-danger-600 flex items-center justify-center shadow-glow-red">
-            <Zap size={22} className="text-white" fill="white" />
+        <div className="flex items-center gap-3 justify-center mb-6 sm:mb-8">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-danger-600 flex items-center justify-center shadow-glow-red">
+            <Zap size={18} className="text-white" fill="white" />
           </div>
           <div>
-            <div className="font-display font-bold text-2xl text-white tracking-tight">TM Alert</div>
-            <div className="text-xs text-slate-500 tracking-widest uppercase">Emergency Notification System</div>
+            <div className="font-display font-bold text-xl sm:text-2xl text-white tracking-tight">TM Alert</div>
+            <div className="text-[10px] sm:text-xs text-slate-500 tracking-widest uppercase">Emergency Notification System</div>
           </div>
         </div>
 
-        <div className="card p-8">
+        <div className="card p-6 sm:p-8">
           <h1 className="font-display font-semibold text-xl text-white mb-1">Sign in</h1>
           <p className="text-slate-500 text-sm mb-6">Access the Taylor Morrison alert platform</p>
 

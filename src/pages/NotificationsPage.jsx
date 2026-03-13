@@ -71,22 +71,22 @@ export function NotificationsListPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Notifications</h1>
           <p className="text-slate-500 text-sm">
-            {total > 0 
+            {total > 0
               ? `${total} notification${total !== 1 ? 's' : ''}`
               : 'All sent and scheduled notifications'}
           </p>
         </div>
-        <button onClick={() => navigate('/notifications/new')} className="btn-primary">
-          <Bell size={14} /> + New Notification
+        <button onClick={() => navigate('/notifications/new')} className="btn-primary w-full sm:w-auto justify-center">
+          <Bell size={14} /> <span className="hidden xs:inline">+ New Notification</span><span className="xs:hidden">New Alert</span>
         </button>
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 p-1 bg-surface-900 rounded-lg border border-surface-700/60 w-fit">
+      <div className="flex gap-1 p-1 bg-surface-900 rounded-lg border border-surface-700/60 w-fit max-w-full overflow-x-auto">
         {statuses.map(s => (
           <button
             key={s}
@@ -106,7 +106,8 @@ export function NotificationsListPage() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="w-full">
+        <div className="table-responsive">
+          <table className="w-full min-w-[800px]">
           <thead>
             <tr className="border-b border-surface-700/60">
               <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-5 py-3">Notification</th>
@@ -158,20 +159,21 @@ export function NotificationsListPage() {
             ))}
           </tbody>
         </table>
+        </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="px-5 py-3 border-t border-surface-700/40 flex items-center justify-between">
-            <div className="text-xs text-slate-500">
+          <div className="px-4 sm:px-5 py-3 border-t border-surface-700/40 flex flex-col sm:flex-row items-center gap-3 sm:gap-0 justify-between">
+            <div className="text-xs text-slate-500 text-center sm:text-left">
               Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, total)} of {total} results
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2 justify-center">
               <button
                 onClick={() => handlePageChange(page - 1)}
                 disabled={page === 1}
                 className="btn-ghost py-1.5 px-3 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                <ChevronLeft size={14} /> Previous
+                <ChevronLeft size={14} /> <span className="hidden xs:inline">Previous</span>
               </button>
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
@@ -180,8 +182,8 @@ export function NotificationsListPage() {
                     onClick={() => handlePageChange(p)}
                     className={cn(
                       'w-8 h-8 rounded-md text-xs font-medium transition-all',
-                      page === p 
-                        ? 'bg-surface-700 text-white' 
+                      page === p
+                        ? 'bg-surface-700 text-white'
                         : 'text-slate-500 hover:text-slate-300 hover:bg-surface-800'
                     )}
                   >
@@ -194,7 +196,7 @@ export function NotificationsListPage() {
                 disabled={page === totalPages}
                 className="btn-ghost py-1.5 px-3 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                Next <ChevronRight size={14} />
+                <span className="hidden xs:inline">Next</span> <ChevronRight size={14} />
               </button>
             </div>
           </div>
@@ -254,20 +256,22 @@ export function NotificationDetailPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/notifications')} className="btn-ghost py-1.5 px-3 text-xs">← Back</button>
-        <h1 className="font-display font-bold text-xl text-white flex-1">{notification.title}</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <button onClick={() => navigate('/notifications')} className="btn-ghost py-1.5 px-3 text-xs shrink-0">
+          <span className="hidden sm:inline">← Back</span><span className="sm:hidden">←</span>
+        </button>
+        <h1 className="font-display font-bold text-xl text-white flex-1 truncate">{notification.title}</h1>
         <span className={statusColor(notification.status)}>{notification.status}</span>
         {['draft', 'scheduled'].includes(notification.status) && (
-          <button onClick={handleCancel} className="btn-ghost text-danger-400 hover:text-danger-300 py-1.5 px-3 text-xs">
-            <XCircle size={14} /> Cancel
+          <button onClick={handleCancel} className="btn-ghost text-danger-400 hover:text-danger-300 py-1.5 px-3 text-xs shrink-0">
+            <XCircle size={14} /> <span className="hidden sm:inline">Cancel</span>
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left: message + delivery */}
-        <div className="col-span-2 space-y-5">
+        <div className="lg:col-span-2 space-y-5">
           {/* Message */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Message</h3>

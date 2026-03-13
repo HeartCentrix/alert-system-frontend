@@ -653,7 +653,7 @@ export default function PeoplePage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">People</h1>
           <p className="text-slate-500 text-sm">{total} employees in the system</p>
@@ -663,19 +663,19 @@ export default function PeoplePage() {
           <button
             onClick={() => fileRef.current?.click()}
             disabled={importing}
-            className="btn-outline"
+            className="btn-outline whitespace-nowrap"
           >
-            <Upload size={14} /> {importing ? 'Importing...' : 'Import CSV'}
+            <Upload size={14} /> <span className="hidden lg:inline">{importing ? 'Importing...' : 'Import CSV'}</span><span className="lg:hidden">{importing ? 'Importing...' : 'Import'}</span>
           </button>
-          <button onClick={() => setModal('create')} className="btn-primary">
-            <Plus size={14} /> Add Person
+          <button onClick={() => setModal('create')} className="btn-primary whitespace-nowrap">
+            <Plus size={14} /> <span className="hidden sm:inline">Add Person</span><span className="sm:hidden">Add</span>
           </button>
         </div>
       </div>
 
       {/* Search and Bulk Actions */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative w-72">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="relative w-full sm:w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             value={searchInput}
@@ -720,7 +720,8 @@ export default function PeoplePage() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="w-full">
+        <div className="table-responsive">
+          <table className="w-full min-w-[1000px]">
           <thead>
             <tr className="border-b border-surface-700/60">
               {isAdmin && (
@@ -837,20 +838,21 @@ export default function PeoplePage() {
             })}
           </tbody>
         </table>
+        </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="px-5 py-3 border-t border-surface-700/40 flex items-center justify-between">
-            <span className="text-xs text-slate-500">
+          <div className="px-4 sm:px-5 py-3 border-t border-surface-700/40 flex flex-col sm:flex-row items-center gap-3 sm:gap-0 justify-between">
+            <span className="text-xs text-slate-500 text-center sm:text-left">
               Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, total)} of {total}
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => setPage(p => p - 1)} disabled={page === 1} className="btn-ghost py-1 px-2">
-                <ChevronLeft size={14} />
+                <ChevronLeft size={14} /> <span className="hidden xs:inline">Previous</span>
               </button>
               <span className="text-sm text-slate-400 px-2">{page} / {totalPages}</span>
               <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages} className="btn-ghost py-1 px-2">
-                <ChevronRight size={14} />
+                <span className="hidden xs:inline">Next</span> <ChevronRight size={14} />
               </button>
             </div>
           </div>

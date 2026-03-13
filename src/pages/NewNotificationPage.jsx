@@ -612,13 +612,14 @@ export default function NewNotificationPage() {
   return (
     <div className="max-w-2xl mx-auto animate-fade-in">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} className="btn-ghost py-1.5 px-3 text-xs">
-          ← Back
+        <button onClick={() => navigate(-1)} className="btn-ghost py-1.5 px-3 text-xs shrink-0">
+          <span className="hidden sm:inline">← Back</span>
+          <span className="sm:hidden">←</span>
         </button>
-        <h1 className="font-display font-bold text-xl text-white">New Notification</h1>
+        <h1 className="font-display font-bold text-xl text-white truncate">New Notification</h1>
       </div>
 
-      <div className="card p-8">
+      <div className="card p-4 sm:p-8">
         <StepIndicator current={step} steps={STEPS} />
 
         <div className="min-h-64">
@@ -629,17 +630,17 @@ export default function NewNotificationPage() {
           {step === 4 && <Step5 {...stepProps} />}
         </div>
 
-        <div className="flex items-center justify-between mt-8 pt-6 border-t border-surface-700/40">
+        <div className="flex flex-col sm:flex-row items-center gap-3 mt-6 sm:mt-8 pt-6 border-t border-surface-700/40">
           <button
             type="button"
             onClick={() => setStep(s => s - 1)}
             disabled={step === 0}
-            className="btn-ghost disabled:opacity-30"
+            className="btn-ghost disabled:opacity-30 w-full sm:w-auto"
           >
             <ChevronLeft size={16} /> Previous
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs text-slate-500">{step + 1} of {STEPS.length}</span>
           </div>
 
@@ -647,7 +648,10 @@ export default function NewNotificationPage() {
             type="button"
             onClick={handleNext}
             disabled={!canProceed() || sending}
-            className={step === STEPS.length - 1 ? 'btn-danger' : 'btn-primary'}
+            className={cn(
+              'w-full sm:w-auto justify-center',
+              step === STEPS.length - 1 ? 'btn-danger' : 'btn-primary'
+            )}
           >
             {sending ? (
               <>
