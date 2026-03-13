@@ -251,7 +251,7 @@ export const locationsAPI = {
 // ─── LOCATION AUTOCOMPLETE ────────────────────────────────────────────────────
 export const locationAutocompleteAPI = {
   /**
-   * Search for locations using LocationIQ autocomplete
+   * Search for locations using Photon autocomplete
    * @param {string} query - Search query (min 3 characters)
    * @param {object} options - Optional parameters
    * @param {number} options.limit - Number of results (1-20, default 10)

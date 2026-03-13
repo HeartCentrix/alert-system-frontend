@@ -39,8 +39,8 @@
 
 /**
  * @typedef {Object} LocationHealthResponse
- * @property {string} service - Service name ("locationiq")
- * @property {boolean} configured - Whether API key is configured
+ * @property {string} service - Service name ("photon")
+ * @property {boolean} configured - Whether provider is configured
  * @property {boolean} redis_connected - Redis connection status
  * @property {number} cache_keys - Number of cached queries
  * @property {boolean} celery_available - Celery worker availability
