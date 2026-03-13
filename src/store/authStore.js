@@ -80,6 +80,10 @@ const useAuthStore = create((set, get) => ({
     set({ accessToken: token })
   },
 
+  setRefreshToken: (token) => {
+    set({ refreshToken: token })
+  },
+
   login: async (email, password) => {
     const { data } = await authAPI.login(email, password)
 

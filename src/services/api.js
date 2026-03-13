@@ -124,9 +124,7 @@ api.interceptors.response.use(
           // Also update refresh token if rotated (save to sessionStorage for cross-origin)
           if (data.refresh_token) {
             sessionStorage.setItem('refresh_token', data.refresh_token)
-            if (_getAuthStore?.()?.refreshToken !== undefined) {
-              _getAuthStore.getState().refreshToken = data.refresh_token
-            }
+            _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
           }
 
           return { access_token: data.access_token, refresh_token: data.refresh_token }
