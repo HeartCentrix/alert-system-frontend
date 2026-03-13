@@ -34,55 +34,43 @@ const useAuthStore = create((set, get) => ({
     // Prevent duplicate initialization
     if (get().isInitializing) return
     set({ isInitializing: true })
-    console.log('[authStore.init] Starting initialization...')
 
     try {
       // First, try to get user info (access token might still be in memory)
-      console.log('[authStore.init] Calling /auth/me...')
       const { data } = await authAPI.me()
-      console.log('[authStore.init] /auth/me succeeded, user:', data.email)
       set({ user: data, isAuthenticated: true, isLoading: false, isInitializing: false })
     } catch (error) {
-      console.log('[authStore.init] /auth/me failed with status:', error?.response?.status)
       // If /me fails (likely 401/403 due to missing access token after refresh),
       // try to refresh the access token using the refresh token
       if (error?.response?.status === 401 || error?.response?.status === 403) {
         try {
           // Get refresh token from sessionStorage (survives page reload for cross-origin)
           const refreshTokenFromStorage = getRefreshToken()
-          console.log('[authStore.init] Refresh token from sessionStorage:', refreshTokenFromStorage ? 'present' : 'missing')
 
           // Attempt silent refresh using refresh token (body or cookie)
-          console.log('[authStore.init] Calling /auth/refresh...')
           const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
-          console.log('[authStore.init] /auth/refresh succeeded')
 
           // If refresh succeeds, store the new tokens and fetch user info
           if (refreshData?.access_token) {
             // Save new refresh token to sessionStorage if rotated
             if (refreshData.refresh_token) {
               saveRefreshToken(refreshData.refresh_token)
-              console.log('[authStore.init] Saved new refresh_token to sessionStorage')
             }
             set({
               accessToken: refreshData.access_token,
               refreshToken: refreshData.refresh_token || refreshTokenFromStorage,
             })
-            console.log('[authStore.init] Calling /auth/me after refresh...')
             const { data: userData } = await authAPI.me()
-            console.log('[authStore.init] /auth/me succeeded after refresh, user:', userData.email)
             set({ user: userData, isAuthenticated: true, isLoading: false, isInitializing: false })
             return
           }
         } catch (refreshError) {
           // Refresh failed - session truly expired, clear everything
-          console.log('[authStore.init] Session refresh failed, clearing session', refreshError)
           clearRefreshToken()
         }
       }
 
       // Either not a 401/403 error, or refresh also failed - clear session
-      console.log('[authStore.init] Clearing session and marking as not authenticated')
       clearRefreshToken()
       set({ user: null, isAuthenticated: false, isLoading: false, isInitializing: false, accessToken: null, refreshToken: null, mfaState: null })
     }
