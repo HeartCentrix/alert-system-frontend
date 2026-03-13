@@ -78,7 +78,8 @@ vercel --prod
 ---
 
 ## Design System
-
+ 
+ 
 - **Font**: Syne (display/headings) + DM Sans (body)
 - **Theme**: Dark surface palette — `surface-950` base, `surface-900` cards
 - **Colors**: `primary-600` blue actions, `danger-600` red alerts, status badge system
