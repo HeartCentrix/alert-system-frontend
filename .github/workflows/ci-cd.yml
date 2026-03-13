@@ -111,6 +111,7 @@ jobs:
             --coverage.reporter=text \
             --coverage.reporter=lcov \
             --coverage.reporter=json-summary
+        continue-on-error: false  # Tests should pass
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
