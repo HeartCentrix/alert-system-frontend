@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
+import { locationAudienceAPI } from '@/services/api'
 
 import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
@@ -32,6 +33,8 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   const { init, isAuthenticated, isLoading } = useAuthStore()
+  const watchIdRef = useRef(null)
+  const geofenceUpdateIntervalRef = useRef(null)
 
   useEffect(() => {
     init()
@@ -40,6 +43,95 @@ export default function App() {
   useEffect(() => {
     // Auth state change tracking removed for security
   }, [isAuthenticated, isLoading])
+
+  // ─── GEOFENCE TRACKING ──────────────────────────────────────────────────────
+  // Automatically track user location and update geofence assignments
+  useEffect(() => {
+    // Clear any existing watchers/intervals when auth state changes
+    if (watchIdRef.current !== null) {
+      navigator.geolocation?.clearWatch(watchIdRef.current)
+      watchIdRef.current = null
+    }
+    if (geofenceUpdateIntervalRef.current) {
+      clearInterval(geofenceUpdateIntervalRef.current)
+      geofenceUpdateIntervalRef.current = null
+    }
+
+    // Only track location when authenticated
+    if (!isAuthenticated || isLoading) {
+      return
+    }
+
+    // Check if browser supports geolocation
+    if (!navigator.geolocation) {
+      console.debug('Geolocation not supported by this browser')
+      return
+    }
+
+    // Request initial location and update geofence
+    const updateGeofence = (position) => {
+      const { latitude, longitude } = position.coords
+      
+      // SECURITY: Round coordinates to ~100m precision for privacy
+      // This prevents tracking exact location while still enabling geofence
+      const roundedLat = Math.round(latitude * 1000) / 1000
+      const roundedLon = Math.round(longitude * 1000) / 1000
+      
+      // Silent update - don't await, don't show errors to user
+      locationAudienceAPI.updateGeofence(roundedLat, roundedLon)
+        .catch(err => {
+          // Silently ignore - might be rate limited or network issue
+          // Don't log error details to avoid leaking info
+          console.debug('Geofence update skipped')
+        })
+    }
+
+    const handleError = (error) => {
+      // Log but don't bother user - they might have denied permission
+      // Don't log error details to avoid fingerprinting
+      console.debug('Geolocation unavailable')
+    }
+
+    // Get initial location
+    navigator.geolocation.getCurrentPosition(updateGeofence, handleError, {
+      enableHighAccuracy: false,
+      timeout: 10000,
+      maximumAge: 60000 // Accept cached position up to 1 minute old
+    })
+
+    // Watch for location changes (passive, low-power mode)
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      updateGeofence,
+      handleError,
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 60000 // Update at most once per minute
+      }
+    )
+
+    // Fallback: Periodic check every 5 minutes (in case watchPosition doesn't fire)
+    geofenceUpdateIntervalRef.current = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(updateGeofence, handleError, {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000 // Accept cached position up to 5 minutes old
+      })
+    }, 5 * 60 * 1000) // 5 minutes
+
+    // Cleanup on unmount or auth change
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+      if (geofenceUpdateIntervalRef.current) {
+        clearInterval(geofenceUpdateIntervalRef.current)
+        geofenceUpdateIntervalRef.current = null
+      }
+    }
+  }, [isAuthenticated, isLoading])
+  // ────────────────────────────────────────────────────────────────────────────
 
   return (
     <BrowserRouter>
