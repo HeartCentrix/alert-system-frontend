@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { authAPI } from '@/services/api'
+import { authAPI, usersAPI } from '@/services/api'
 
 // Helper functions for sessionStorage (survives page reload, cleared on tab close)
 // This is required for cross-origin deployments (Vercel + Railway) where cookies don't work
@@ -17,6 +17,21 @@ const clearRefreshToken = () => {
   sessionStorage.removeItem('refresh_token')
 }
 
+// Also persist access token to sessionStorage so it survives page refresh
+const saveAccessToken = (token) => {
+  if (token) {
+    sessionStorage.setItem('access_token', token)
+  }
+}
+
+const getAccessToken = () => {
+  return sessionStorage.getItem('access_token')
+}
+
+const clearAccessToken = () => {
+  sessionStorage.removeItem('access_token')
+}
+
 const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -29,6 +44,8 @@ const useAuthStore = create((set, get) => ({
   mfaChallengeToken: null,
   mfaQRCodeURI: null,
   mfaSecret: null,
+  // Heartbeat interval ID
+  heartbeatIntervalId: null,
 
   init: async () => {
     // Prevent duplicate initialization
@@ -36,9 +53,16 @@ const useAuthStore = create((set, get) => ({
     set({ isInitializing: true })
 
     try {
-      // First, try to get user info (access token might still be in memory)
+      // First, try to get user info using persisted access token
+      const persistedToken = getAccessToken()
+      if (persistedToken) {
+        set({ accessToken: persistedToken })
+      }
+      
       const { data } = await authAPI.me()
       set({ user: data, isAuthenticated: true, isLoading: false, isInitializing: false })
+      // Start heartbeat if user is authenticated
+      get().startHeartbeat()
     } catch (error) {
       // If /me fails (likely 401/403 due to missing access token after refresh),
       // try to refresh the access token using the refresh token
@@ -56,23 +80,59 @@ const useAuthStore = create((set, get) => ({
             if (refreshData.refresh_token) {
               saveRefreshToken(refreshData.refresh_token)
             }
+            // Save access token to sessionStorage
+            saveAccessToken(refreshData.access_token)
             set({
               accessToken: refreshData.access_token,
               refreshToken: refreshData.refresh_token || refreshTokenFromStorage,
             })
             const { data: userData } = await authAPI.me()
             set({ user: userData, isAuthenticated: true, isLoading: false, isInitializing: false })
+            // Start heartbeat if user is authenticated
+            get().startHeartbeat()
             return
           }
         } catch (refreshError) {
           // Refresh failed - session truly expired, clear everything
           clearRefreshToken()
+          clearAccessToken()
         }
       }
 
       // Either not a 401/403 error, or refresh also failed - clear session
       clearRefreshToken()
+      clearAccessToken()
       set({ user: null, isAuthenticated: false, isLoading: false, isInitializing: false, accessToken: null, refreshToken: null, mfaState: null })
+    }
+  },
+
+  startHeartbeat: () => {
+    // Clear any existing interval
+    const existingId = get().heartbeatIntervalId
+    if (existingId) {
+      clearInterval(existingId)
+    }
+
+    // Send initial heartbeat
+    usersAPI.heartbeat().catch(() => {}) // Ignore errors on initial heartbeat
+
+    // Set up interval to send heartbeat every 30 seconds
+    const intervalId = setInterval(() => {
+      usersAPI.heartbeat().catch(() => {
+        // If heartbeat fails (e.g., 401), stop the interval
+        console.warn('Heartbeat failed, stopping interval')
+        get().stopHeartbeat()
+      })
+    }, 30000) // 30 seconds
+
+    set({ heartbeatIntervalId: intervalId })
+  },
+
+  stopHeartbeat: () => {
+    const intervalId = get().heartbeatIntervalId
+    if (intervalId) {
+      clearInterval(intervalId)
+      set({ heartbeatIntervalId: null })
     }
   },
 
@@ -107,7 +167,8 @@ const useAuthStore = create((set, get) => ({
 
     if (!data?.access_token) throw new Error('No token received from server')
 
-    // Store access token in memory, refresh token in memory + sessionStorage (for cross-origin)
+    // Store access token in memory and sessionStorage, refresh token in memory + sessionStorage
+    saveAccessToken(data.access_token)
     saveRefreshToken(data.refresh_token)
     set({
       accessToken: data.access_token,
@@ -120,6 +181,10 @@ const useAuthStore = create((set, get) => ({
       mfaQRCodeURI: null,
       mfaSecret: null,
     })
+    
+    // Start heartbeat after successful login
+    get().startHeartbeat()
+    
     return data
   },
 
@@ -131,6 +196,7 @@ const useAuthStore = create((set, get) => ({
 
     if (data?.recovery_codes && data.recovery_codes.length > 0) {
       saveRefreshToken(data.refresh_token)
+      saveAccessToken(data.access_token)
       set({
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
@@ -142,6 +208,7 @@ const useAuthStore = create((set, get) => ({
       })
     } else {
       saveRefreshToken(data.refresh_token)
+      saveAccessToken(data.access_token)
       set({
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
@@ -151,6 +218,8 @@ const useAuthStore = create((set, get) => ({
         mfaChallengeToken: null,
         mfaQRCodeURI: null,
       })
+      // Start heartbeat after successful MFA verification
+      get().startHeartbeat()
     }
     return data
   },
@@ -162,6 +231,7 @@ const useAuthStore = create((set, get) => ({
     const { data } = await authAPI.verifyMFAWithRecoveryCode(token, recoveryCode)
 
     saveRefreshToken(data.refresh_token)
+    saveAccessToken(data.access_token)
     set({
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
@@ -180,7 +250,10 @@ const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try { await authAPI.logout() } catch {}
+    // Stop heartbeat before clearing session
+    get().stopHeartbeat()
     clearRefreshToken()
+    clearAccessToken()
     set({
       accessToken: null,
       user: null,
@@ -193,7 +266,10 @@ const useAuthStore = create((set, get) => ({
   },
 
   clearSession: () => {
+    // Stop heartbeat before clearing session
+    get().stopHeartbeat()
     clearRefreshToken()
+    clearAccessToken()
     set({
       accessToken: null,
       user: null,

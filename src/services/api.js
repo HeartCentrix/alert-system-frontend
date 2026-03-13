@@ -223,6 +223,7 @@ export const usersAPI = {
     return api.post('/users/import/csv', form, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
   departments: () => api.get('/users/meta/departments'),
+  heartbeat: () => api.post('/users/heartbeat'),
 }
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────

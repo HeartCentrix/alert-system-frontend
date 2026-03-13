@@ -516,9 +516,11 @@ export default function PeoplePage() {
   const currentUser = useAuthStore(state => state.user)
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['users', page, search],
     queryFn: () => usersAPI.list({ page, page_size: 20, search: search || undefined }).then(r => r.data),
+    refetchInterval: 30000, // Refresh every 30 seconds to show real-time online status
+    refetchIntervalInBackground: true, // Also refresh when tab is in background
   })
 
   const deleteMutation = useMutation({
