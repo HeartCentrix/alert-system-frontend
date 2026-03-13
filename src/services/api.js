@@ -100,7 +100,7 @@ api.interceptors.response.use(
         try {
           // Get refresh token from store or sessionStorage (for cross-origin Vercel + Railway)
           const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
-          
+
           // POST /auth/refresh — send refresh token in body (cross-origin) and cookie (same-origin)
           const { data } = await axios.post(
             `${API_BASE}/auth/refresh`,
@@ -169,8 +169,8 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   logout: () => api.post('/auth/logout', {}),   // no body — token in cookie
-  refresh: (refreshToken) => api.post('/auth/refresh', 
-    refreshToken ? { refresh_token: refreshToken } : {}, 
+  refresh: (refreshToken) => api.post('/auth/refresh',
+    refreshToken ? { refresh_token: refreshToken } : {},
     { withCredentials: true }  // Send both: body (cross-origin) + cookie (same-origin)
   ),
   me: () => api.get('/auth/me'),
