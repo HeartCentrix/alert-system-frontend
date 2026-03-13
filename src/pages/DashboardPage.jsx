@@ -86,22 +86,23 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Dashboard</h1>
           <p className="text-slate-500 text-sm mt-0.5">Taylor Morrison Emergency Operations</p>
         </div>
         <button
           onClick={() => navigate('/notifications/new')}
-          className="btn-primary gap-2"
+          className="btn-primary gap-2 w-full sm:w-auto justify-center"
         >
           <Bell size={15} />
-          + New Notification
+          <span className="hidden xs:inline">+ New Notification</span>
+          <span className="xs:hidden">New Alert</span>
         </button>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={Users} label="Total People" color="blue"
           value={stats?.total_users ?? 0}
@@ -128,9 +129,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Main grid */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Audience map + activity */}
-        <div className="col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Audience location card */}
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
@@ -153,7 +154,7 @@ export default function DashboardPage() {
             )}
 
             {/* Summary row */}
-            <div className="mt-4 pt-4 border-t border-surface-700/40 flex gap-6">
+            <div className="mt-4 pt-4 border-t border-surface-700/40 flex flex-wrap gap-4 sm:gap-6">
               <div>
                 <div className="text-xs text-slate-500 uppercase tracking-wider">Total Groups</div>
                 <div className="font-display font-bold text-xl text-white">{stats?.total_groups ?? 0}</div>

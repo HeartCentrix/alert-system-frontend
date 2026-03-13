@@ -17,6 +17,14 @@
   ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
   ::-webkit-scrollbar-thumb:hover { background: #64748b; }
   ::selection { background: #1d4ed8; color: white; }
+
+  /* Responsive font sizing */
+  @media (max-width: 640px) {
+    html { font-size: 14px; }
+  }
+  @media (max-width: 475px) {
+    html { font-size: 13px; }
+  }
 }
 
 @layer components {
@@ -114,6 +122,20 @@
   .select { @apply input; appearance: none; cursor: pointer; }
 
   .stat-card { @apply card; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
+
+  /* Responsive table wrapper */
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Mobile-friendly touch targets */
+  @media (max-width: 640px) {
+    .btn, .input, .select, .nav-item {
+      min-height: 44px;
+    }
+  }
 
   .nav-item {
     display: flex;

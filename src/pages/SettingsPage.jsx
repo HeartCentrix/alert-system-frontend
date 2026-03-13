@@ -27,8 +27,8 @@ export default function SettingsPage() {
         <p className="text-slate-500 text-sm">Manage your account preferences</p>
       </div>
 
-      {/* Tab navigation */}
-      <div className="flex gap-1 mb-6 p-1 bg-surface-900 rounded-lg border border-surface-700/60 w-fit">
+      {/* Tab navigation - horizontal scrollable on mobile */}
+      <div className="flex gap-1 mb-6 p-1 bg-surface-900 rounded-lg border border-surface-700/60 overflow-x-auto overflow-y-hidden whitespace-nowrap">
         {tabs.map(t => {
           const Icon = t.icon
           return (
@@ -36,7 +36,7 @@ export default function SettingsPage() {
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-shrink-0',
                 tab === t.id
                   ? 'bg-surface-700 text-white'
                   : 'text-slate-500 hover:text-slate-300'
