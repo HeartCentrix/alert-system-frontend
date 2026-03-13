@@ -38,7 +38,7 @@ const NAV = [
   { label: 'My Account', icon: Settings, to: '/settings' },
 ]
 
-export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChange }) {
+export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -47,7 +47,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
   const isControlled = controlledCollapsed !== undefined
   const sidebarOpen = isControlled ? !controlledCollapsed : !internalCollapsed
   const setSidebarOpen = isControlled
-    ? (open) => onCollapseChange?.(!open)
+    ? (open) => onCollapse?.(!open)
     : setInternalCollapsed
 
   const handleLogout = async () => {
@@ -59,15 +59,23 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
 
   return (
-    <div className="relative h-full">
-      {/* Toggle Button - Outside sidebar at top-right */}
+    <div className="relative h-full shrink-0">
+      {/* Mobile overlay backdrop */}
+      {sidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-surface-950/60 backdrop-blur-sm z-40"
+          onClick={toggleSidebar}
+        />
+      )}
+
+      {/* Toggle Button - Outside sidebar at top-right (desktop only) */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={toggleSidebar}
               className={cn(
-                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
+                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0 hidden lg:flex',
                 'w-11 h-11 min-w-[44px] min-h-[44px]',
                 'rounded-lg',
                 'bg-surface-900 border border-surface-700/60',
@@ -90,8 +98,12 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
 
       {/* Sidebar */}
       <aside className={cn(
-        'flex flex-col h-full bg-surface-900 border-r border-surface-700/60 transition-all duration-300 shrink-0 relative z-30',
-        sidebarOpen ? 'w-60' : 'w-16'
+        'flex flex-col h-full bg-surface-900 border-r border-surface-700/60 transition-all duration-300 relative z-50',
+        sidebarOpen ? 'w-60' : 'w-16',
+        // Mobile: fixed overlay positioning
+        'lg:relative lg:translate-x-0',
+        !sidebarOpen && 'lg:w-16',
+        'fixed left-0 top-0 lg:static'
       )}>
         {/* Logo */}
         {sidebarOpen ? (
@@ -112,7 +124,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
         ) : (
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex flex-col items-center py-3 border-b border-surface-700/60 shrink-0 hover:bg-surface-800/50 transition-colors w-full"
+            className="flex flex-col items-center justify-center py-3 border-b border-surface-700/60 shrink-0 hover:bg-surface-800/50 transition-colors w-full"
             title="Go to Dashboard"
           >
             <div className="w-11 h-11 rounded-lg bg-danger-600 flex items-center justify-center shrink-0 shadow-glow-red">
@@ -122,7 +134,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
         )}
 
       {/* New Notification CTA */}
-      <div className="p-3">
+      <div className={cn('p-3', !sidebarOpen && 'px-2')}>
         <button
           onClick={() => navigate('/notifications/new')}
           className={cn(
@@ -137,7 +149,10 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
+      <nav className={cn(
+        'flex-1 overflow-y-auto px-3 space-y-0.5',
+        !sidebarOpen && 'px-2'
+      )}>
         {NAV.map((item, i) => {
           if (item.header) {
             return sidebarOpen ? (
@@ -153,7 +168,11 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
               <NavLink
                 key={i}
                 to={item.to}
-                className={() => cn('nav-item', active && 'active')}
+                className={() => cn(
+                  'nav-item',
+                  active && 'active',
+                  !sidebarOpen && 'justify-center'
+                )}
               >
                 <Icon size={16} className="shrink-0" />
                 {sidebarOpen && <span>{item.label}</span>}
@@ -166,7 +185,8 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapseChan
               to={item.to}
               className={({ isActive }) => cn(
                 'nav-item',
-                isActive && 'active'
+                isActive && 'active',
+                !sidebarOpen && 'justify-center'
               )}
             >
               <Icon size={16} className="shrink-0" />
