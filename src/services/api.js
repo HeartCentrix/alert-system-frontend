@@ -24,9 +24,15 @@ function clearAuthData() {
 }
 
 // ── CSRF helper ─────────────────────────────────────────────────────────────
-// Reads the non-HttpOnly csrf_token cookie set by the backend.
-// This proves the request comes from our page (cross-origin JS can't read cookies).
+// For cross-origin (Vercel → Railway), document.cookie can't read cookies from
+// the backend domain. Instead, we read the CSRF token from the X-CSRF-Token
+// response header that the backend sends on every response.
+let _csrfToken = null
+
 function getCsrfToken() {
+  // First try in-memory token (set from response header — works cross-origin)
+  if (_csrfToken) return _csrfToken
+  // Fallback: same-origin cookie (works in dev with proxy)
   const match = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)
   return match ? decodeURIComponent(match[1]) : null
 }
@@ -53,7 +59,12 @@ api.interceptors.request.use((config) => {
 
 // ── Response interceptor — handle 401/403 with silent refresh ───────────────
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    // Capture CSRF token from response header (cross-origin safe)
+    const csrfHeader = res.headers?.['x-csrf-token']
+    if (csrfHeader) _csrfToken = csrfHeader
+    return res
+  },
   async (err) => {
     const original = err.config
 
