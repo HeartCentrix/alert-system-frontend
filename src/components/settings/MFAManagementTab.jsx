@@ -5,6 +5,7 @@ import { authAPI } from '@/services/api'
 import toast from 'react-hot-toast'
 import { cn } from '@/utils/helpers'
 import { getPrimaryErrorMessage, getUserFacingErrorMessages } from '@/utils/errorHandler'
+import ModalPortal from '@/components/ui/ModalPortal'
 
 /**
  * MFAManagementTab - Complete MFA lifecycle management component
@@ -271,23 +272,24 @@ function MFAEnrollmentModal({ onClose, onEnrollmentComplete }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        {step === 'reauth' && (
-          <form onSubmit={handleStartEnrollment} className="p-6">
-            <h3 className="font-display font-semibold text-xl text-white mb-2">
-              Enable MFA
-            </h3>
-            <p className="text-slate-400 text-sm mb-4">
-              For security, please confirm your password before enabling MFA.
-            </p>
-            <div className="mb-4">
-              <label className="label">Current Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="bg-slate-800 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          {step === 'reauth' && (
+            <form onSubmit={handleStartEnrollment} className="p-6">
+              <h3 className="font-display font-semibold text-xl text-white mb-2">
+                Enable MFA
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                For security, please confirm your password before enabling MFA.
+              </p>
+              <div className="mb-4">
+                <label className="label">Current Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input"
                 placeholder="Enter your password"
                 autoFocus
               />
@@ -335,6 +337,7 @@ function MFAEnrollmentModal({ onClose, onEnrollmentComplete }) {
         )}
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -415,23 +418,24 @@ function MFADisableModal({ onClose, onDisableComplete }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-xl max-w-md w-full">
-        <form onSubmit={handleDisable} className="p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-danger-600/20 flex items-center justify-center">
-              <AlertTriangle size={20} className="text-danger-400" />
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="bg-slate-800 rounded-xl max-w-md w-full">
+          <form onSubmit={handleDisable} className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-danger-600/20 flex items-center justify-center">
+                <AlertTriangle size={20} className="text-danger-400" />
+              </div>
+              <h3 className="font-display font-semibold text-lg text-white">
+                Disable MFA
+              </h3>
             </div>
-            <h3 className="font-display font-semibold text-lg text-white">
-              Disable MFA
-            </h3>
-          </div>
 
-          <div className="bg-danger-900/20 border border-danger-800/50 rounded-lg p-4 mb-4">
-            <p className="text-sm text-danger-300">
-              <strong>Warning:</strong> Disabling MFA will remove the extra layer of security
-              from your account. Anyone with your password will be able to access your account.
-            </p>
+            <div className="bg-danger-900/20 border border-danger-800/50 rounded-lg p-4 mb-4">
+              <p className="text-sm text-danger-300">
+                <strong>Warning:</strong> Disabling MFA will remove the extra layer of security
+                from your account. Anyone with your password will be able to access your account.
+              </p>
           </div>
 
           <div className="space-y-4">
@@ -487,6 +491,7 @@ function MFADisableModal({ onClose, onDisableComplete }) {
         </form>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -588,16 +593,17 @@ function MFAResetModal({ onClose, onResetComplete }) {
 
   if (step === 'reauth') {
     return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 rounded-xl max-w-md w-full">
-          <form onSubmit={handleStartReset} className="p-6">
-            <h3 className="font-display font-semibold text-xl text-white mb-2">
-              Reset MFA
-            </h3>
-            <p className="text-slate-400 text-sm mb-4">
-              Enter your password and current MFA code (or a recovery code) to start the reset process.
-            </p>
-            <div className="space-y-4">
+      <ModalPortal>
+        <div className="modal-overlay">
+          <div className="bg-slate-800 rounded-xl max-w-md w-full">
+            <form onSubmit={handleStartReset} className="p-6">
+              <h3 className="font-display font-semibold text-xl text-white mb-2">
+                Reset MFA
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Enter your password and current MFA code (or a recovery code) to start the reset process.
+              </p>
+              <div className="space-y-4">
               <div>
                 <label className="label">Current Password</label>
                 <input
@@ -638,15 +644,17 @@ function MFAResetModal({ onClose, onResetComplete }) {
           </form>
         </div>
       </div>
+    </ModalPortal>
     )
   }
 
   if (step === 'setup') {
     return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 rounded-xl max-w-lg w-full">
-          <MFASetupStep
-            qrCodeURI={qrCodeUri}
+      <ModalPortal>
+        <div className="modal-overlay">
+          <div className="bg-slate-800 rounded-xl max-w-lg w-full">
+            <MFASetupStep
+              qrCodeURI={qrCodeUri}
             secret={secret}
             onVerify={handleVerifyCode}
             onCancel={onClose}
@@ -655,19 +663,22 @@ function MFAResetModal({ onClose, onResetComplete }) {
           />
         </div>
       </div>
+    </ModalPortal>
     )
   }
 
   if (step === 'success') {
     return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 rounded-xl max-w-lg w-full">
-          <RecoveryCodesDisplay
-            codes={recoveryCodes}
-            onClose={handleDismissRecoveryCodes}
-          />
+      <ModalPortal>
+        <div className="modal-overlay">
+          <div className="bg-slate-800 rounded-xl max-w-lg w-full">
+            <RecoveryCodesDisplay
+              codes={recoveryCodes}
+              onClose={handleDismissRecoveryCodes}
+            />
+          </div>
         </div>
-      </div>
+      </ModalPortal>
     )
   }
 
@@ -891,41 +902,44 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
 
   if (codes) {
     return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 rounded-xl max-w-lg w-full p-6">
-          <div className="mb-4 p-3 bg-success-900/20 border border-success-800/50 rounded-lg">
-            <p className="text-sm text-success-300">
-              <strong>Success!</strong> {oldCodesInvalidated} old code{oldCodesInvalidated !== 1 ? 's' : ''} invalidated.
-              Store these new codes securely.
-            </p>
+      <ModalPortal>
+        <div className="modal-overlay">
+          <div className="bg-slate-800 rounded-xl max-w-lg w-full p-6">
+            <div className="mb-4 p-3 bg-success-900/20 border border-success-800/50 rounded-lg">
+              <p className="text-sm text-success-300">
+                <strong>Success!</strong> {oldCodesInvalidated} old code{oldCodesInvalidated !== 1 ? 's' : ''} invalidated.
+                Store these new codes securely.
+              </p>
+            </div>
+            <RecoveryCodesDisplay codes={codes} onClose={handleDismissRegeneratedCodes} />
           </div>
-          <RecoveryCodesDisplay codes={codes} onClose={handleDismissRegeneratedCodes} />
         </div>
-      </div>
+      </ModalPortal>
     )
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-xl max-w-md w-full">
-        <form onSubmit={handleRegenerate} className="p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-primary-600/20 flex items-center justify-center">
-              <RefreshCw size={20} className="text-primary-400" />
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="bg-slate-800 rounded-xl max-w-md w-full">
+          <form onSubmit={handleRegenerate} className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-primary-600/20 flex items-center justify-center">
+                <RefreshCw size={20} className="text-primary-400" />
+              </div>
+              <h3 className="font-display font-semibold text-lg text-white">
+                Regenerate Recovery Codes
+              </h3>
             </div>
-            <h3 className="font-display font-semibold text-lg text-white">
-              Regenerate Recovery Codes
-            </h3>
-          </div>
 
-          <div className="bg-slate-700/50 border border-slate-600/50 rounded-lg p-4 mb-4">
-            <p className="text-sm text-slate-300">
-              For security, you must verify your identity before regenerating recovery codes.
-              Your old codes will be invalidated immediately.
-            </p>
-          </div>
+            <div className="bg-slate-700/50 border border-slate-600/50 rounded-lg p-4 mb-4">
+              <p className="text-sm text-slate-300">
+                For security, you must verify your identity before regenerating recovery codes.
+                Your old codes will be invalidated immediately.
+              </p>
+            </div>
 
-          <div className="space-y-4">
+            <div className="space-y-4">
             <div>
               <label className="label">Current Password</label>
               <input
@@ -982,5 +996,6 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
         </form>
       </div>
     </div>
+    </ModalPortal>
   )
 }
