@@ -7,38 +7,43 @@ import { locationAutocompleteAPI } from '@/services/api'
  * @typedef {import('@/types/location').LocationAutocompleteReturn} LocationAutocompleteReturn
  */
 
-// localStorage key for cache
-const CACHE_STORAGE_KEY = 'locationiq_cache_v2'
+// localStorage key — new version with permanent caching
+const CACHE_STORAGE_KEY = 'geocode_cache_v3'
 
 // Cache configuration
-const DEFAULT_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
-const DEFAULT_MAX_CACHE_SIZE = 20
+// No TTL — location data (city names, coordinates) is essentially permanent.
+// "New York" at (40.71, -74.00) won't change. Expiring this cache just
+// generates unnecessary API calls.
+const DEFAULT_MAX_CACHE_SIZE = 200  // increased from 20 — each entry is ~2-5KB
 
 /**
- * Location Autocomplete Hook with Aggressive Caching
- * 
- * Features:
- * - Debounced search (450ms default)
- * - localStorage caching (10 min TTL, 20 entries max)
- * - Request deduplication (prevents duplicate in-flight requests)
- * - Rate limiting (800ms minimum between API calls)
- * - AbortController for canceling in-flight requests
- * - Minimum 3 characters before searching
- * 
- * @param {LocationAutocompleteOptions} options - Configuration options
- * @returns {LocationAutocompleteReturn} Autocomplete state and handlers
+ * Location Autocomplete Hook with Permanent Caching
+ *
+ * Caching strategy (3 layers, all permanent):
+ *   L0: React state     — current session, instant
+ *   L1: localStorage    — survives page reload, ~1ms
+ *   L2: Backend Redis   — survives deploys, shared across users
+ *
+ * Rate-limit protection (user never waits):
+ *   - 550ms debounce (slightly longer to batch fast typers)
+ *   - 1000ms minimum between API calls
+ *   - AbortController cancels stale in-flight requests
+ *   - Request deduplication prevents duplicate fetches
+ *   - Backend adds its own token-bucket + coalescing layer
+ *
+ * Net effect: after a location is searched ONCE by ANY user,
+ * it's cached permanently at every layer. Photon barely gets touched.
  */
 export function useLocationAutocomplete(options = {}) {
   const {
-    debounceMs = 450,
+    debounceMs = 550,
     minLength = 3,
     limit = 10,
     countrycodes,
     viewbox,
     bounded = false,
-    minRequestInterval = 800,
-    maxCacheSize = 20,
-    cacheTTL = DEFAULT_CACHE_TTL,
+    minRequestInterval = 1000,
+    maxCacheSize = DEFAULT_MAX_CACHE_SIZE,
   } = options
 
   const [query, setQuery] = useState('')
@@ -48,14 +53,16 @@ export function useLocationAutocomplete(options = {}) {
   const [selected, setSelected] = useState(/** @type {LocationResult|null} */ (null))
 
   // Refs for request management
-  const debounceTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null))
-  const abortControllerRef = useRef(/** @type {AbortController|null} */ (null))
+  const debounceTimerRef = useRef(null)
+  const abortControllerRef = useRef(null)
   const lastRequestTimeRef = useRef(0)
   const justSelectedRef = useRef(false)
-  const pendingRequestRef = useRef(/** @type {Promise<any>|null} */ (null))
-  
-  // In-memory cache for session (faster than localStorage)
-  const memoryCacheRef = useRef(/** @type {Map<string, {results: LocationResult[], timestamp: number}>} */ (new Map()))
+  const pendingRequestRef = useRef(null)
+
+  // In-memory cache (L0 — fastest, per-session)
+  const memoryCacheRef = useRef(new Map())
+
+  // ── localStorage permanent cache (L1) ──────────────────────────────
 
   // Load cache from localStorage on mount
   useEffect(() => {
@@ -63,26 +70,25 @@ export function useLocationAutocomplete(options = {}) {
       const stored = localStorage.getItem(CACHE_STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)
-        const now = Date.now()
-        
-        // Load valid cache entries into memory
+        // No TTL check — all entries are valid permanently
         Object.entries(parsed).forEach(([key, value]) => {
-          const { timestamp } = /** @type {{results: LocationResult[], timestamp: number}} */ (value)
-          if (now - timestamp < cacheTTL) {
-            memoryCacheRef.current.set(key, /** @type {{results: LocationResult[], timestamp: number}} */ (value))
+          if (value && typeof value === 'object' && Array.isArray(value.results)) {
+            memoryCacheRef.current.set(key, value)
           }
         })
       }
     } catch (e) {
-      console.warn('Failed to load location cache:', e)
+      // Corrupted cache — clear and start fresh
+      console.warn('Location cache corrupt, clearing:', e)
+      try { localStorage.removeItem(CACHE_STORAGE_KEY) } catch (_) {}
     }
-  }, [cacheTTL])
+  }, [])
 
-  // Persist cache to localStorage (throttled)
-  const persistCacheRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null))
+  // Persist cache to localStorage (throttled to avoid I/O spam)
+  const persistCacheRef = useRef(null)
   const persistCache = useCallback(() => {
     if (persistCacheRef.current) return
-    
+
     persistCacheRef.current = setTimeout(() => {
       try {
         const cacheObj = {}
@@ -91,32 +97,30 @@ export function useLocationAutocomplete(options = {}) {
         })
         localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cacheObj))
       } catch (e) {
-        // localStorage might be full or disabled
         if (e.name === 'QuotaExceededError') {
-          // Clear oldest entries if full
+          // localStorage FULL — evict oldest half
           const entries = Array.from(memoryCacheRef.current.entries())
-            .sort((a, b) => a[1].timestamp - b[1].timestamp)
-          const toDelete = entries.slice(0, Math.floor(maxCacheSize / 2))
+            .sort((a, b) => (a[1].cachedAt || 0) - (b[1].cachedAt || 0))
+          const toDelete = entries.slice(0, Math.floor(entries.length / 2))
           toDelete.forEach(([key]) => memoryCacheRef.current.delete(key))
-          // Try again
+          // Retry persist
           try {
             const cacheObj = {}
             memoryCacheRef.current.forEach((value, key) => {
               cacheObj[key] = value
             })
             localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cacheObj))
-          } catch (e2) {
-            console.warn('Location cache persist failed after cleanup:', e2)
+          } catch (_) {
+            console.warn('Location cache persist failed after eviction')
           }
-        } else {
-          console.warn('Failed to persist location cache:', e)
         }
       }
       persistCacheRef.current = null
-    }, 3000)
-  }, [maxCacheSize])
+    }, 2000)
+  }, [])
 
-  // Generate cache key (normalized)
+  // ── Cache key generation ───────────────────────────────────────────
+
   const getCacheKey = useCallback((q) => {
     const normalized = q.trim().toLowerCase().replace(/\s+/g, ' ')
     const parts = [normalized]
@@ -125,40 +129,46 @@ export function useLocationAutocomplete(options = {}) {
     return parts.join('|')
   }, [countrycodes, viewbox])
 
-  // Get from cache
+  // ── Cache read (no TTL check) ──────────────────────────────────────
+
   const getFromCache = useCallback((cacheKey) => {
     const cached = memoryCacheRef.current.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < cacheTTL) {
+    if (cached && Array.isArray(cached.results)) {
       return cached.results
     }
-    if (cached) {
-      memoryCacheRef.current.delete(cacheKey)
-    }
     return null
-  }, [cacheTTL])
+  }, [])
 
-  // Set cache
+  // ── Cache write (permanent, with eviction by size) ─────────────────
+
   const setCache = useCallback((cacheKey, results) => {
     const entry = {
       results,
-      timestamp: Date.now(),
+      cachedAt: Date.now(),  // for eviction ordering only, NOT expiry
     }
-    
-    // Enforce max cache size
+
+    // Enforce max cache size (evict oldest by cachedAt)
     if (memoryCacheRef.current.size >= maxCacheSize) {
-      const entries = Array.from(memoryCacheRef.current.entries())
-        .sort((a, b) => a[1].timestamp - b[1].timestamp)
-      const oldestKey = entries[0]?.[0]
+      let oldestKey = null
+      let oldestTime = Infinity
+      memoryCacheRef.current.forEach((val, key) => {
+        const t = val.cachedAt || 0
+        if (t < oldestTime) {
+          oldestTime = t
+          oldestKey = key
+        }
+      })
       if (oldestKey) {
         memoryCacheRef.current.delete(oldestKey)
       }
     }
-    
+
     memoryCacheRef.current.set(cacheKey, entry)
     persistCache()
   }, [maxCacheSize, persistCache])
 
-  // Clear suggestions and reset state
+  // ── Handlers ───────────────────────────────────────────────────────
+
   const clear = useCallback(() => {
     setQuery('')
     setResults([])
@@ -167,7 +177,6 @@ export function useLocationAutocomplete(options = {}) {
     setLoading(false)
   }, [])
 
-  // Handle selection
   const select = useCallback((location) => {
     setSelected(location)
     setResults([])
@@ -175,18 +184,18 @@ export function useLocationAutocomplete(options = {}) {
     justSelectedRef.current = true
   }, [])
 
-  // Invalidate selection (call when user edits after selecting)
   const invalidateSelection = useCallback(() => {
     if (selected) {
       setSelected(null)
     }
   }, [selected])
 
-  // Fetch results with rate limiting and deduplication
+  // ── Fetch with rate limiting ───────────────────────────────────────
+
   const fetchResults = useCallback(async (searchQuery) => {
     const cacheKey = getCacheKey(searchQuery)
-    
-    // Check memory cache first
+
+    // Check L0/L1 cache (instant, no network)
     const cached = getFromCache(cacheKey)
     if (cached) {
       setResults(cached)
@@ -195,7 +204,7 @@ export function useLocationAutocomplete(options = {}) {
       return
     }
 
-    // Check if there's a pending request for this query
+    // Deduplicate: if there's already a pending request, wait for it
     if (pendingRequestRef.current) {
       try {
         const pendingResults = await pendingRequestRef.current
@@ -203,20 +212,18 @@ export function useLocationAutocomplete(options = {}) {
           setResults(pendingResults)
           setError(null)
         }
-      } catch (e) {
-        // Ignore pending request errors
-      }
+      } catch (_) {}
       return
     }
 
-    // Rate limiting: enforce minimum time between requests
+    // Rate limiting: enforce minimum time between API calls
     const now = Date.now()
     const timeSinceLastRequest = now - lastRequestTimeRef.current
     if (timeSinceLastRequest < minRequestInterval) {
       const delay = minRequestInterval - timeSinceLastRequest
       await new Promise(resolve => setTimeout(resolve, delay))
     }
-    
+
     lastRequestTimeRef.current = Date.now()
     setLoading(true)
     setError(null)
@@ -225,8 +232,6 @@ export function useLocationAutocomplete(options = {}) {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    
-    // Create new abort controller
     abortControllerRef.current = new AbortController()
 
     try {
@@ -238,21 +243,19 @@ export function useLocationAutocomplete(options = {}) {
       })
 
       const fetchedResults = data.results || []
-      
-      // Cache the results
-      if (fetchedResults.length > 0) {
-        setCache(cacheKey, fetchedResults)
-      }
-      
+
+      // Cache permanently (both non-empty and empty results)
+      setCache(cacheKey, fetchedResults)
+
       setResults(fetchedResults)
       setError(null)
     } catch (err) {
-      if (err.name === 'AbortError') {
+      if (err.name === 'AbortError' || err.name === 'CanceledError') {
         return
       }
 
       console.error('Location autocomplete error:', err)
-      
+
       if (err.response?.status === 429) {
         setError('Too many requests. Please wait a moment.')
       } else if (err.response?.status === 503) {
@@ -262,7 +265,7 @@ export function useLocationAutocomplete(options = {}) {
       } else {
         setError('Failed to fetch location suggestions.')
       }
-      
+
       setResults([])
     } finally {
       setLoading(false)
@@ -270,32 +273,28 @@ export function useLocationAutocomplete(options = {}) {
     }
   }, [getCacheKey, getFromCache, setCache, limit, countrycodes, viewbox, bounded, minRequestInterval])
 
-  // Handle query changes with debouncing
+  // ── Debounced query watcher ────────────────────────────────────────
+
   useEffect(() => {
-    // Clear previous timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current)
     }
 
-    // Clear suggestions if query is too short
     if (!query || query.trim().length < minLength) {
       setResults([])
       setLoading(false)
       return
     }
 
-    // Skip fetching if user just made a selection
     if (justSelectedRef.current) {
       justSelectedRef.current = false
       return
     }
 
-    // Debounce the search
     debounceTimerRef.current = setTimeout(() => {
       fetchResults(query.trim())
     }, debounceMs)
 
-    // Cleanup
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current)
@@ -303,23 +302,17 @@ export function useLocationAutocomplete(options = {}) {
     }
   }, [query, minLength, debounceMs, fetchResults])
 
-  // Cleanup on unmount
+  // ── Cleanup on unmount ─────────────────────────────────────────────
+
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current)
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-      if (persistCacheRef.current) {
-        clearTimeout(persistCacheRef.current)
-      }
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      if (abortControllerRef.current) abortControllerRef.current.abort()
+      if (persistCacheRef.current) clearTimeout(persistCacheRef.current)
     }
   }, [])
 
   return {
-    // State
     query,
     results,
     loading,
@@ -328,8 +321,7 @@ export function useLocationAutocomplete(options = {}) {
     hasSelection: !!selected,
     hasResults: results.length > 0,
     isEmpty: !query && results.length === 0,
-    
-    // Handlers
+
     setQuery,
     select,
     clear,
