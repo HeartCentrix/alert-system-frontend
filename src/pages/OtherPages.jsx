@@ -632,12 +632,18 @@ function LocationModal({ location, onClose, onSaved }) {
   const latitude = watch('latitude')
   const longitude = watch('longitude')
 
-  // Custom validation for location name
+  // Custom validation for location name (optional for edits, required for new)
   const validateLocationName = (value) => {
-    if (!value || !value.trim()) {
-      return 'Location name is required'
+    // For new locations, name is required
+    if (!location && (!value || !value.trim())) {
+      return 'Location name is required for new locations'
     }
-    if (value.trim().length < 3) {
+    // For existing locations, name is optional (keep existing if not provided)
+    if (location && (!value || !value.trim())) {
+      return true // Valid - will keep existing name
+    }
+    // If provided, must be at least 3 characters
+    if (value && value.trim().length < 3) {
       return 'Location name must be at least 3 characters'
     }
     return true
@@ -646,10 +652,9 @@ function LocationModal({ location, onClose, onSaved }) {
   // Register validation for name field
   useEffect(() => {
     register('name', {
-      required: 'Location name is required',
       validate: validateLocationName,
     })
-  }, [register])
+  }, [register, location])
 
   // Handle location selection from autocomplete
   const handleLocationSelect = ({ display_name, latitude, longitude, address }) => {
@@ -673,13 +678,15 @@ function LocationModal({ location, onClose, onSaved }) {
     setValue('zip_code', '')
   }
 
-  // Custom validation to ensure coordinates are filled
+  // Custom validation to ensure coordinates are filled (only for new locations)
   const validateCoordinates = () => {
     const lat = watch('latitude')
     const lon = watch('longitude')
-    if (!lat || !lon) {
+    // For new locations, coordinates are required
+    if (!location && (!lat || !lon)) {
       return 'Please select a location from the suggestions'
     }
+    // For existing locations, coordinates are optional (keep existing if not changed)
     return true
   }
 
@@ -715,7 +722,7 @@ function LocationModal({ location, onClose, onSaved }) {
         </div>
         <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
           <div>
-            <label className="label">Location Name *</label>
+            <label className="label">Location Name</label>
             <LocationAutocompleteInput
               value={locationName || ''}
               onChange={(e) => setValue('name', e.target.value)}
@@ -725,7 +732,6 @@ function LocationModal({ location, onClose, onSaved }) {
               onLocationClear={handleLocationClear}
               placeholder="Search for a location (e.g., New Delhi, India)"
               clearable
-              required
               options={{
                 // Removed countrycodes restriction to allow global search
                 // Add countrycodes: 'us' if you want to restrict to US only
@@ -743,13 +749,18 @@ function LocationModal({ location, onClose, onSaved }) {
             )}
             {!errors.name && (
               <p className="text-xs text-slate-500 mt-1">
-                Start typing to search. Select a location to auto-fill coordinates.
+                {location ? 'Optional: Search to change location. Leave blank to keep existing.' : 'Start typing to search. Select a location to auto-fill coordinates.'}
               </p>
             )}
           </div>
           <div>
-            <label className="label">Street Address</label>
-            <input {...register('address')} className="input" placeholder="Auto-filled when you select a location" />
+            <label className="label">Street Address *</label>
+            <input {...register('address', { required: 'Street address is required' })} className="input" placeholder="Auto-filled when you select a location" />
+            {errors.address && (
+              <p className="mt-1 text-xs text-danger-400 flex items-center gap-1">
+                <AlertCircle size={11} /> {errors.address.message}
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
