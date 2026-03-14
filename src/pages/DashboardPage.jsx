@@ -104,9 +104,9 @@ export default function DashboardPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          icon={Users} label="Total People" color="blue"
-          value={stats?.total_users ?? 0}
-          sub={`${mapData?.unassigned_users || 0} unassigned`}
+          icon={Users} label="Online Users" color="blue"
+          value={stats?.online_users ?? 0}
+          sub={`Registered Users : ${stats?.total_users ?? 0}`}
           onClick={() => navigate('/people')}
         />
         <StatCard
@@ -164,7 +164,7 @@ export default function DashboardPage() {
                 <div className="font-display font-bold text-xl text-white">{stats?.total_locations ?? 0}</div>
               </div>
               <div>
-                <div className="text-xs text-slate-500 uppercase tracking-wider">Total People</div>
+                <div className="text-xs text-slate-500 uppercase tracking-wider">Registered Users</div>
                 <div className="font-display font-bold text-xl text-white">{stats?.total_users ?? 0}</div>
               </div>
             </div>
