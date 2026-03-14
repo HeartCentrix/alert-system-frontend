@@ -24,6 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       </ErrorBoundary>
       <Toaster
         position="top-right"
+        containerStyle={{ zIndex: 99999 }}
         toastOptions={{
           style: {
             background: '#1e293b',
