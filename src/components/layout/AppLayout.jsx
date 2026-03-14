@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import { LogOut, Menu } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import Sidebar from './Sidebar'
 import useAuthStore from '@/store/authStore'
 import toast from 'react-hot-toast'
@@ -36,14 +36,6 @@ export default function AppLayout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="h-14 bg-surface-900/80 border-b border-surface-700/60 backdrop-blur-sm flex items-center px-4 sm:px-6 gap-2 sm:gap-4 shrink-0">
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setSidebarCollapsed(false)}
-            className="lg:hidden text-slate-400 hover:text-slate-200 transition-colors"
-            aria-label="Open menu"
-          >
-            <Menu size={20} />
-          </button>
           <div className="flex-1" />
           <div className="text-sm text-slate-400 font-medium hidden sm:block">Taylor Morrison</div>
           <div className="w-px h-4 bg-surface-600 hidden sm:block" />

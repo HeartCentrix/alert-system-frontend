@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
+import 'leaflet/dist/leaflet.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

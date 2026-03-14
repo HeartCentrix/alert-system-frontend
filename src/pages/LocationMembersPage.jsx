@@ -10,6 +10,7 @@ import { locationAudienceAPI, usersAPI, locationsAPI, authAPI } from '@/services
 import toast from 'react-hot-toast'
 import LocationAudienceMap from '@/components/LocationAudienceMap'
 import { useIsDocumentVisible } from '@/hooks/useVisibility'
+import ModalPortal from '@/components/ui/ModalPortal'
 
 // Assignment type badge colors
 const assignmentTypeColors = {
@@ -89,15 +90,16 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-2xl animate-fade-in">
-        <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-          <div>
-            <h2 className="font-display font-semibold text-white">Assign User to Location</h2>
-            <p className="text-sm text-slate-500 mt-1">{locationName}</p>
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="card w-full max-w-2xl animate-fade-in">
+          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+            <div>
+              <h2 className="font-display font-semibold text-white">Assign User to Location</h2>
+              <p className="text-sm text-slate-500 mt-1">{locationName}</p>
+            </div>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
-        </div>
 
         {usersError && (
           <div className="p-4 bg-danger-900/20 border border-danger-500/30 rounded-lg m-5">
@@ -229,6 +231,7 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
         </form>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -239,12 +242,13 @@ function MemberDetailsModal({ member, onClose, onRemove }) {
   if (!member) return null
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-md animate-fade-in">
-        <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-          <h2 className="font-display font-semibold text-white">Member Details</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
-        </div>
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="card w-full max-w-md animate-fade-in">
+          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+            <h2 className="font-display font-semibold text-white">Member Details</h2>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+          </div>
 
         <div className="p-5 space-y-4">
           {/* User Info */}
@@ -367,6 +371,7 @@ function MemberDetailsModal({ member, onClose, onRemove }) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 

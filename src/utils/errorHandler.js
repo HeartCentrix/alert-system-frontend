@@ -1,27 +1,11 @@
 /**
- * Error Normalization Utility
- * 
- * Converts API errors (especially Pydantic/FastAPI validation errors) into
- * safe, user-friendly strings for display.
- * 
- * Prevents React crashes from rendering raw error objects.
- * 
- * @see https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/
+ * Converts API errors (Pydantic/FastAPI validation errors) into
+ * user-friendly strings for display.
  */
 
 /**
- * Normalize a Pydantic/FastAPI validation error into a user-friendly message.
- * 
- * Pydantic errors have structure like:
- * {
- *   type: "string_pattern_mismatch",
- *   loc: ["body", "mfa_code"],
- *   msg: "String should match pattern '^\\d{6}$'",
- *   input: "abcdef"
- * }
- * 
- * @param {Object} errorItem - A single validation error item
- * @returns {string} - User-friendly error message
+ * @param {Object} errorItem
+ * @returns {string}
  */
 function normalizePydanticError(errorItem) {
   if (!errorItem || typeof errorItem !== 'object') {
