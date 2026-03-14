@@ -7,7 +7,7 @@ import { locationAutocompleteAPI } from '@/services/api'
  * @typedef {import('@/types/location').LocationAutocompleteReturn} LocationAutocompleteReturn
  */
 
-// localStorage key — new version with permanent caching
+// localStorage entry name — new version with permanent caching
 const CACHE_STORAGE_KEY = 'geocode_cache_v3'
 
 // Cache configuration
@@ -19,20 +19,8 @@ const DEFAULT_MAX_CACHE_SIZE = 200  // increased from 20 — each entry is ~2-5K
 /**
  * Location Autocomplete Hook with Permanent Caching
  *
- * Caching strategy (3 layers, all permanent):
- *   L0: React state     — current session, instant
- *   L1: localStorage    — survives page reload, ~1ms
- *   L2: Backend Redis   — survives deploys, shared across users
- *
- * Rate-limit protection (user never waits):
- *   - 550ms debounce (slightly longer to batch fast typers)
- *   - 1000ms minimum between API calls
- *   - AbortController cancels stale in-flight requests
- *   - Request deduplication prevents duplicate fetches
- *   - Backend adds its own token-bucket + coalescing layer
- *
- * Net effect: after a location is searched ONCE by ANY user,
- * it's cached permanently at every layer. Photon barely gets touched.
+ * Caching (3 layers): React state → localStorage → Backend Redis
+ * Rate-limiting: 550ms debounce, 1000ms min interval, AbortController
  */
 export function useLocationAutocomplete(options = {}) {
   const {
@@ -119,7 +107,7 @@ export function useLocationAutocomplete(options = {}) {
     }, 2000)
   }, [])
 
-  // ── Cache key generation ───────────────────────────────────────────
+  // ── Cache entry generation ────────────────────────────────────────
 
   const getCacheKey = useCallback((q) => {
     const normalized = q.trim().toLowerCase().replace(/\s+/g, ' ')

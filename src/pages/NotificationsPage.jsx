@@ -517,7 +517,6 @@ export function SafetyRespondPage() {
     enabled: !!id && !!token,
   })
 
-  // Verify token on mount
   const [tokenValid, setTokenValid] = useState(false)
   const [tokenError, setTokenError] = useState('')
 
@@ -527,7 +526,6 @@ export function SafetyRespondPage() {
       return
     }
 
-    // Token validation happens on submit - for now just check it exists
     if (token && token.length > 20) {
       setTokenValid(true)
     } else {
@@ -537,8 +535,6 @@ export function SafetyRespondPage() {
 
   const submitMutation = useMutation({
     mutationFn: (data) => {
-      // Pass token directly - no localStorage storage (security best practice)
-      // Token is only used for this single request and never persisted
       return notificationsAPI.respond(id, data, token)
     },
     onSuccess: () => {
@@ -553,7 +549,6 @@ export function SafetyRespondPage() {
     onError: (error) => {
       const errorMessage = error.response?.data?.detail || 'Failed to submit response'
       
-      // Check if user already responded (token reuse attempt)
       if (errorMessage.includes('already submitted')) {
         toast.error('You have already submitted your response.')
         // Redirect to success page since they already responded

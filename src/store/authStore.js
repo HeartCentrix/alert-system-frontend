@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 import { authAPI, usersAPI } from '@/services/api'
 
-// Helper functions for sessionStorage (survives page reload, cleared on tab close)
-// This is required for cross-origin deployments (Vercel + Railway) where cookies don't work
 const saveRefreshToken = (token) => {
   if (token) {
     sessionStorage.setItem('refresh_token', token)
@@ -17,7 +15,6 @@ const clearRefreshToken = () => {
   sessionStorage.removeItem('refresh_token')
 }
 
-// Also persist access token to sessionStorage so it survives page refresh
 const saveAccessToken = (token) => {
   if (token) {
     sessionStorage.setItem('access_token', token)
@@ -36,8 +33,8 @@ const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
-  accessToken: null,          // ← in memory only
-  refreshToken: null,         // ← in memory + sessionStorage (for cross-origin Vercel + Railway)
+  accessToken: null,
+  refreshToken: null,
   isInitializing: false,      // Prevent duplicate init calls
   // MFA state
   mfaState: null,
@@ -53,7 +50,6 @@ const useAuthStore = create((set, get) => ({
     set({ isInitializing: true })
 
     try {
-      // First, try to get user info using persisted access token
       const persistedToken = getAccessToken()
       if (persistedToken) {
         set({ accessToken: persistedToken })
@@ -64,23 +60,15 @@ const useAuthStore = create((set, get) => ({
       // Start heartbeat if user is authenticated
       get().startHeartbeat()
     } catch (error) {
-      // If /me fails (likely 401/403 due to missing access token after refresh),
-      // try to refresh the access token using the refresh token
       if (error?.response?.status === 401 || error?.response?.status === 403) {
         try {
-          // Get refresh token from sessionStorage (survives page reload for cross-origin)
           const refreshTokenFromStorage = getRefreshToken()
-
-          // Attempt silent refresh using refresh token (body or cookie)
           const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
 
-          // If refresh succeeds, store the new tokens and fetch user info
           if (refreshData?.access_token) {
-            // Save new refresh token to sessionStorage if rotated
             if (refreshData.refresh_token) {
               saveRefreshToken(refreshData.refresh_token)
             }
-            // Save access token to sessionStorage
             saveAccessToken(refreshData.access_token)
             set({
               accessToken: refreshData.access_token,
@@ -167,7 +155,6 @@ const useAuthStore = create((set, get) => ({
 
     if (!data?.access_token) throw new Error('No token received from server')
 
-    // Store access token in memory and sessionStorage, refresh token in memory + sessionStorage
     saveAccessToken(data.access_token)
     saveRefreshToken(data.refresh_token)
     set({

@@ -13,7 +13,7 @@ export default function ResetPasswordPage() {
   const [validating, setValidating] = useState(true)
   const [token, setToken] = useState(null)
 
-  // Get token from URL ONCE on mount - don't depend on React Router searchParams
+  // Get reset parameter from URL ONCE on mount — avoid React Router searchParams dependency
   useEffect(() => {
     // Use window.location directly - it's immediately available
     const urlParams = new URLSearchParams(window.location.search)
@@ -54,7 +54,6 @@ export default function ResetPasswordPage() {
     }
   }
 
-  // Show loading while validating token
   if (validating) {
     return (
       <div className="min-h-screen bg-surface-950 flex items-center justify-center">

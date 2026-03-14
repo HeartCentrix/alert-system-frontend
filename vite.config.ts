@@ -3,36 +3,25 @@ import { defineConfig } from 'vite'
 import type { Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { randomBytes } from 'node:crypto'
 
-/**
- * =============================================================================
- * OWASP Security Headers Configuration
- * =============================================================================
- * These headers follow OWASP Secure Headers Project recommendations
- * and are applied to ALL responses from the Vite dev server.
- */
+// One-time nonce generated at dev-server startup.
+// Vite injects this into every <script> tag it generates (via html.cspNonce below),
+// which lets script-src use 'nonce-...' instead of 'unsafe-inline'.
+// This nonce rotates on every server restart, limiting its exposure window.
+const DEV_NONCE = randomBytes(16).toString('base64url')
+
 const SECURITY_HEADERS: Record<string, string> = {
-  /**
-   * Content Security Policy (CSP)
-   * Prevents XSS, clickjacking, and data injection attacks
-   * @see https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html
-   * 
-   * Note: 'unsafe-inline' for scripts is required in development for Vite's HMR
-   * and module loading. In production, use a build process with nonce or hashes.
-   */
   'Content-Security-Policy': [
     "default-src 'self'",
-    // 'unsafe-inline' required for Vite dev mode (HMR, inline module loading)
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    // 'unsafe-inline' is required by Radix UI (inline positioning styles) and Tailwind;
-    // Google Fonts stylesheet loaded from googleapis.com
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    `script-src 'self' 'nonce-${DEV_NONCE}'`,
+    "style-src 'self' 'unsafe-inline'",
     // Specific domains only — no scheme-level wildcards (ZAP: Wildcard Directive)
     // CARTO tiles: https://{s}.basemaps.cartocdn.com
     // QR code images: https://api.qrserver.com
     "img-src 'self' data: blob: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com https://api.qrserver.com",
-    // Google Fonts glyphs served from fonts.gstatic.com
-    "font-src 'self' https://fonts.gstatic.com",
+    // Fonts served from own origin only (no external CDN after removing Google Fonts link)
+    "font-src 'self'",
     // ws://localhost:3000 needed for Vite HMR WebSocket
     // 'self' for @vite/client HMR connection
     "connect-src 'self' http://localhost:8000 ws://localhost:3000 blob:",
@@ -226,10 +215,95 @@ const BLOCKED_PATH_PATTERNS = [
  */
 function createSecurityMiddleware(): Connect.NextHandleFunction {
   return (req, res, next) => {
-    const urlPath = req.url?.split('?')[0] || ''
+    const rawUrl = req.url || ''
+    const urlPath = rawUrl.split('?')[0] || ''
 
     // =======================================================================
-    // Step 0: Skip Vite internal endpoints - let Vite handle these directly
+    // Step 1: Apply security headers to EVERY response — including Vite
+    // internal paths (/@vite/client, /@react-refresh, /node_modules/.vite/*)
+    // and all early-exit 403/400 responses.
+    // =======================================================================
+    Object.entries(SECURITY_HEADERS).forEach(([header, value]) => {
+      res.setHeader(header, value)
+    })
+
+    // =======================================================================
+    // Step 2: Attack pattern detection on the FULL raw URL (path + query).
+    // Must run BEFORE the Vite internal path skip — ZAP injects payloads into
+    // the ?v= cache-buster parameter on /node_modules/.vite/deps/*.js requests,
+    // which would otherwise bypass all checks via the skip below.
+    //
+    // Attack types detected here (observed in ZAP ajax_spider scan):
+    //   • Path traversal       — ../  ..\
+    //   • Null byte injection  — %00  \0
+    //   • HTTP response split  — %0a  %0d  \r  \n  (raw or encoded newlines)
+    //   • SSTI / template inj  — #set(  ${  (Velocity, Freemarker, etc.)
+    //   • Format string        — %n%s  %1!s  (Java / Win printf injection)
+    //   • Spring4Shell probe   — class.module.classLoader
+    // =======================================================================
+    const lowerRaw = rawUrl.toLowerCase()
+
+    if (lowerRaw.includes('../') || lowerRaw.includes('..\\')) {
+      console.warn(`[SECURITY] Blocked path traversal attempt: ${rawUrl}`)
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'text/plain')
+      res.end('Bad Request: Path traversal detected')
+      return
+    }
+
+    if (lowerRaw.includes('%00') || rawUrl.includes('\0')) {
+      console.warn(`[SECURITY] Blocked null byte injection attempt: ${rawUrl}`)
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'text/plain')
+      res.end('Bad Request: Invalid characters detected')
+      return
+    }
+
+    // HTTP response splitting — newlines injected into query params turn a
+    // single response into two, letting an attacker plant arbitrary headers
+    // (e.g. Set-Cookie) in the second response. Block %0a/%0d and literal CR/LF.
+    if (lowerRaw.includes('%0a') || lowerRaw.includes('%0d') ||
+        rawUrl.includes('\r') || rawUrl.includes('\n')) {
+      console.warn(`[SECURITY] Blocked HTTP response splitting attempt: ${rawUrl}`)
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'text/plain')
+      res.end('Bad Request: Invalid characters in request')
+      return
+    }
+
+    // Server-side template injection — Velocity (#set), generic ${...} expressions
+    if (lowerRaw.includes('%23set(') || lowerRaw.includes('#set(') ||
+        lowerRaw.includes('${') || lowerRaw.includes('%24{')) {
+      console.warn(`[SECURITY] Blocked template injection attempt: ${rawUrl}`)
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'text/plain')
+      res.end('Bad Request: Invalid request')
+      return
+    }
+
+    // Format string injection — Java %n/%s sequences and Windows %1!s! printf format
+    if (/%[0-9]*n|%[0-9]+!s/i.test(rawUrl)) {
+      console.warn(`[SECURITY] Blocked format string injection attempt: ${rawUrl}`)
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'text/plain')
+      res.end('Bad Request: Invalid request')
+      return
+    }
+
+    // Spring4Shell / Java classloader probe
+    if (lowerRaw.includes('class.module.classloader') ||
+        lowerRaw.includes('class%2emodule%2eclassloader')) {
+      console.warn(`[SECURITY] Blocked classloader probe attempt: ${rawUrl}`)
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'text/plain')
+      res.end('Bad Request: Invalid request')
+      return
+    }
+
+    // =======================================================================
+    // Step 3: Skip sensitive-path blocking for Vite internal endpoints.
+    // Attack patterns were already checked above; this skip is only to avoid
+    // false-positive 403s on Vite's own module-serving paths.
     // =======================================================================
     const viteInternalPaths = [
       '/@vite',
@@ -239,23 +313,13 @@ function createSecurityMiddleware(): Connect.NextHandleFunction {
       '/__vite_error',
       '/__vite_test'
     ]
-    
-    if (viteInternalPaths.some(path => urlPath.startsWith(path))) {
-      // Don't apply security headers or blocking to Vite internals
+
+    if (viteInternalPaths.some(p => urlPath.startsWith(p))) {
       return next()
     }
 
     // =======================================================================
-    // Step 1: Apply security headers to ALL responses — including errors.
-    // Must come first so that 403/400 early-exit responses also carry HSTS,
-    // X-Content-Type-Options, etc. (ZAP: "Header Not Set" on error paths)
-    // =======================================================================
-    Object.entries(SECURITY_HEADERS).forEach(([header, value]) => {
-      res.setHeader(header, value)
-    })
-
-    // =======================================================================
-    // Step 2: Block access to sensitive paths (explicit paths)
+    // Step 4: Block access to sensitive paths (explicit list)
     // =======================================================================
     const isBlocked = BLOCKED_PATHS.some(blockedPath => {
       return urlPath === blockedPath ||
@@ -270,13 +334,12 @@ function createSecurityMiddleware(): Connect.NextHandleFunction {
       res.end(JSON.stringify({
         error: 'Forbidden',
         message: 'Access to this resource is denied for security reasons',
-        timestamp: new Date().toISOString()
       }))
       return
     }
 
     // =======================================================================
-    // Step 3: Block access to sensitive path patterns (regex matching)
+    // Step 5: Block access to sensitive path patterns (regex matching)
     // =======================================================================
     for (const pattern of BLOCKED_PATH_PATTERNS) {
       if (pattern.test(urlPath)) {
@@ -290,27 +353,6 @@ function createSecurityMiddleware(): Connect.NextHandleFunction {
         }))
         return
       }
-    }
-
-    // =======================================================================
-    // Step 4: Block common attack patterns
-    // =======================================================================
-    const lowerUrl = urlPath.toLowerCase()
-
-    if (lowerUrl.includes('../') || lowerUrl.includes('..\\')) {
-      console.warn(`[SECURITY] Blocked path traversal attempt: ${urlPath}`)
-      res.statusCode = 400
-      res.setHeader('Content-Type', 'text/plain')
-      res.end('Bad Request: Path traversal detected')
-      return
-    }
-
-    if (lowerUrl.includes('%00') || lowerUrl.includes('\0')) {
-      console.warn(`[SECURITY] Blocked null byte injection attempt: ${urlPath}`)
-      res.statusCode = 400
-      res.setHeader('Content-Type', 'text/plain')
-      res.end('Bad Request: Invalid characters detected')
-      return
     }
 
     next()
@@ -344,6 +386,13 @@ function securityPlugin() {
  */
 export default defineConfig({
   plugins: [react(), securityPlugin()],
+
+  // Inject the same nonce into every <script> tag Vite generates (entry module,
+  // React Fast Refresh preamble, etc.) so script-src can use the nonce instead
+  // of 'unsafe-inline'.  The value must match the one in SECURITY_HEADERS above.
+  html: {
+    cspNonce: DEV_NONCE,
+  },
 
   resolve: {
     alias: {

@@ -5,50 +5,40 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true,   // ← CRITICAL: sends HttpOnly cookies (refresh_token, csrf_token)
+  withCredentials: true,
 })
 
 // ── Auth store accessor (breaks circular dependency) ──────────────────────
-// authStore.js calls setAuthStoreAccessor() after it initialises, giving api.js
-// a way to read/write auth state without importing the store directly.
 let _getAuthStore = null
 export function setAuthStoreAccessor(fn) {
   _getAuthStore = fn
 }
 
-// Clear only auth-related items from sessionStorage (not all origin data)
 function clearAuthData() {
   sessionStorage.removeItem('access_token')
   sessionStorage.removeItem('refresh_token')
   sessionStorage.removeItem('user')
 }
 
-// ── CSRF helper ─────────────────────────────────────────────────────────────
-// For cross-origin (Vercel → Railway), document.cookie can't read cookies from
-// the backend domain. Instead, we read the CSRF token from the X-CSRF-Token
-// response header that the backend sends on every response.
+// ── Anti-forgery helper ─────────────────────────────────────────────────────
 let _csrfToken = null
 
 function getCsrfToken() {
-  // First try in-memory token (set from response header — works cross-origin)
   if (_csrfToken) return _csrfToken
-  // Fallback: same-origin cookie (works in dev with proxy)
   const match = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)
   return match ? decodeURIComponent(match[1]) : null
 }
 
 const CSRF_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 
-// ── Mutex for token refresh ──────────────────────────────────────────────────
+// ── Mutex ────────────────────────────────────────────────────────────────────
 let refreshPromise = null
 
 // ── Request interceptor ──────────────────────────────────────────────────────
 api.interceptors.request.use((config) => {
-  // Attach access token from Zustand store via accessor (breaks circular import)
   const token = _getAuthStore?.()?.accessToken ?? null
   if (token) config.headers.Authorization = `Bearer ${token}`
 
-  // Attach CSRF token on state-changing requests
   if (CSRF_METHODS.has(config.method?.toLowerCase())) {
     const csrfToken = getCsrfToken()
     if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken
@@ -57,10 +47,9 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// ── Response interceptor — handle 401/403 with silent refresh ───────────────
+// ── Response interceptor ─────────────────────────────────────────────────────
 api.interceptors.response.use(
   (res) => {
-    // Capture CSRF token from response header (cross-origin safe)
     const csrfHeader = res.headers?.['x-csrf-token']
     if (csrfHeader) _csrfToken = csrfHeader
     return res
@@ -68,7 +57,6 @@ api.interceptors.response.use(
   async (err) => {
     const original = err.config
 
-    // Handle CSRF failure — page is stale, reload to get a fresh cookie
     if (
       err.response?.status === 403 &&
       err.response?.data?.detail?.includes('CSRF')
@@ -77,13 +65,12 @@ api.interceptors.response.use(
       return Promise.reject(err)
     }
 
-    // Skip refresh for auth endpoints - these are handled by authStore.init()
     const isAuthEndpoint =
       original?.url?.includes('/auth/login') ||
       original?.url?.includes('/auth/forgot-password') ||
       original?.url?.includes('/auth/reset-password') ||
-      original?.url?.includes('/auth/me') ||  // ← init() handles /auth/me refresh
-      original?.url?.includes('/auth/refresh') // ← prevent infinite loop
+      original?.url?.includes('/auth/me') ||
+      original?.url?.includes('/auth/refresh')
 
     if (isAuthEndpoint) return Promise.reject(err)
 
@@ -95,7 +82,6 @@ api.interceptors.response.use(
     if (isAuthFailure && original?._retry !== true) {
       if (original) original._retry = true
 
-      // Queue concurrent requests behind a single refresh
       if (refreshPromise) {
         try {
           const tokens = await refreshPromise
@@ -109,19 +95,15 @@ api.interceptors.response.use(
 
       refreshPromise = (async () => {
         try {
-          // Get refresh token from store or sessionStorage (for cross-origin Vercel + Railway)
           const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
 
-          // POST /auth/refresh — send refresh token in body (cross-origin) and cookie (same-origin)
           const { data } = await axios.post(
             `${API_BASE}/auth/refresh`,
             refreshToken ? { refresh_token: refreshToken } : {},
             { withCredentials: true }
           )
 
-          // Store new tokens in Zustand memory via accessor
           _getAuthStore?.()?.setAccessToken?.(data.access_token)
-          // Also update refresh token if rotated (save to sessionStorage for cross-origin)
           if (data.refresh_token) {
             sessionStorage.setItem('refresh_token', data.refresh_token)
             _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
@@ -177,10 +159,10 @@ api.interceptors.response.use(
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
-  logout: () => api.post('/auth/logout', {}),   // no body — token in cookie
+  logout: () => api.post('/auth/logout', {}),
   refresh: (refreshToken) => api.post('/auth/refresh',
     refreshToken ? { refresh_token: refreshToken } : {},
-    { withCredentials: true }  // Send both: body (cross-origin) + cookie (same-origin)
+    { withCredentials: true }
   ),
   me: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/me', data),
@@ -366,8 +348,6 @@ export const notificationsAPI = {
   delivery: (id, params) => api.get(`/notifications/${id}/delivery`, { params }),
   responses: (id) => api.get(`/notifications/${id}/responses`),
   respond: (id, data, token) => {
-    // Pass token directly as parameter - no localStorage storage
-    // Token is only used for this single request
     return api.post(`/notifications/${id}/respond`, data, {
       params: { token }
     })

@@ -315,7 +315,7 @@ function GroupMembersModal({ group, onClose, onSaved }) {
     }
   }
 
-  // Can manage members if: admin+, OR (manager+ AND member of this group)
+  // Can manage members if: elevated role, OR manager+ AND member of this group
   const canManageMembers = isManagerOrAbove && (isAdminOrAbove || isMemberOfGroup)
 
   return (
@@ -499,7 +499,7 @@ export function GroupsPage() {
   
   // Check if user can manage members for a specific group
   // Manager: can only manage groups they are a member of
-  // Admin/Super Admin: can manage all groups
+  // Elevated roles: can manage all groups
   const canManageGroupMembers = (group) => {
     if (!isManagerOrAbove) return false
     if (isAdminOrAbove) return true
