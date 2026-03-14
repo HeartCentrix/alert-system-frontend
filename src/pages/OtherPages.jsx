@@ -617,14 +617,43 @@ export function GroupsPage() {
 // ─── LOCATIONS ────────────────────────────────────────────────────────────────
 
 function LocationModal({ location, onClose, onSaved }) {
+  const isNew = !location
+  
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
-    defaultValues: location || { country: 'USA', geofence_radius_miles: 1.0 }
+    defaultValues: {
+      name: '',
+      address: '',
+      city: '',
+      state: '',
+      zip_code: '',
+      latitude: null,
+      longitude: null,
+      country: 'USA',
+      geofence_radius_miles: 1.0,
+      ...location, // Override with existing location data if editing
+    }
   })
   const [loading, setLoading] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false) // Track if user searched
 
   // Reset form when location prop changes (prevents stale values on re-mount)
   useEffect(() => {
-    reset(location || { country: 'USA', geofence_radius_miles: 1.0 })
+    reset({
+      name: '',
+      address: '',
+      city: '',
+      state: '',
+      zip_code: '',
+      latitude: null,
+      longitude: null,
+      country: 'USA',
+      geofence_radius_miles: 1.0,
+      ...location,
+    })
+    // Set searched flag if location has coordinates (means it was previously saved)
+    if (location?.latitude && location?.longitude) {
+      setHasSearched(true)
+    }
   }, [location, reset])
 
   // Watch location name and coordinates for autocomplete
@@ -632,32 +661,44 @@ function LocationModal({ location, onClose, onSaved }) {
   const latitude = watch('latitude')
   const longitude = watch('longitude')
 
-  // Custom validation for location name (optional for edits, required for new)
+  // Custom validation for location name
   const validateLocationName = (value) => {
-    // For new locations, name is required
-    if (!location && (!value || !value.trim())) {
-      return 'Location name is required for new locations'
+    if (!value || !value.trim()) {
+      return isNew ? 'Location name is required' : true // Required only for new
     }
-    // For existing locations, name is optional (keep existing if not provided)
-    if (location && (!value || !value.trim())) {
-      return true // Valid - will keep existing name
-    }
-    // If provided, must be at least 3 characters
-    if (value && value.trim().length < 3) {
+    if (value.trim().length < 3) {
       return 'Location name must be at least 3 characters'
     }
     return true
   }
 
-  // Register validation for name field
+  // Custom validation for coordinates
+  const validateCoordinates = () => {
+    // For new locations, coordinates are required
+    if (isNew && (!hasSearched || !latitude || !longitude)) {
+      return 'Please select a location from the suggestions'
+    }
+    // For existing locations, keep existing coordinates if not changed
+    return true
+  }
+
+  // Custom validation for address
+  const validateAddress = (value) => {
+    if (!value || !value.trim()) {
+      return isNew ? 'Street address is required' : true // Required only for new
+    }
+    return true
+  }
+
+  // Register validation for fields
   useEffect(() => {
-    register('name', {
-      validate: validateLocationName,
-    })
-  }, [register, location])
+    register('name', { validate: validateLocationName })
+    register('address', { validate: validateAddress })
+  }, [register, isNew])
 
   // Handle location selection from autocomplete
   const handleLocationSelect = ({ display_name, latitude, longitude, address }) => {
+    setHasSearched(true)
     // Fill in the address fields from the selected location
     setValue('address', display_name, { shouldValidate: true })
     setValue('latitude', latitude, { shouldValidate: true })
@@ -670,24 +711,13 @@ function LocationModal({ location, onClose, onSaved }) {
 
   // Handle manual edit (clear lat/lon)
   const handleLocationClear = () => {
+    setHasSearched(false)
     setValue('latitude', null)
     setValue('longitude', null)
     setValue('address', '')
     setValue('city', '')
     setValue('state', '')
     setValue('zip_code', '')
-  }
-
-  // Custom validation to ensure coordinates are filled (only for new locations)
-  const validateCoordinates = () => {
-    const lat = watch('latitude')
-    const lon = watch('longitude')
-    // For new locations, coordinates are required
-    if (!location && (!lat || !lon)) {
-      return 'Please select a location from the suggestions'
-    }
-    // For existing locations, coordinates are optional (keep existing if not changed)
-    return true
   }
 
   const onSubmit = async (data) => {
@@ -722,7 +752,9 @@ function LocationModal({ location, onClose, onSaved }) {
         </div>
         <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
           <div>
-            <label className="label">Location Name</label>
+            <label className="label">
+              Location Name {isNew && <span className="text-danger-400">*</span>}
+            </label>
             <LocationAutocompleteInput
               value={locationName || ''}
               onChange={(e) => setValue('name', e.target.value)}
@@ -730,7 +762,7 @@ function LocationModal({ location, onClose, onSaved }) {
               longitude={watch('longitude')}
               onLocationSelect={handleLocationSelect}
               onLocationClear={handleLocationClear}
-              placeholder="Search for a location (e.g., New Delhi, India)"
+              placeholder={isNew ? "Search for a location (e.g., New Delhi, India)" : "Leave blank to keep existing, or search to change"}
               clearable
               options={{
                 // Removed countrycodes restriction to allow global search
@@ -749,13 +781,21 @@ function LocationModal({ location, onClose, onSaved }) {
             )}
             {!errors.name && (
               <p className="text-xs text-slate-500 mt-1">
-                {location ? 'Optional: Search to change location. Leave blank to keep existing.' : 'Start typing to search. Select a location to auto-fill coordinates.'}
+                {isNew 
+                  ? 'Start typing to search. Select a location to auto-fill coordinates.' 
+                  : 'Optional: Leave blank to keep current location, or search to update.'}
               </p>
             )}
           </div>
           <div>
-            <label className="label">Street Address *</label>
-            <input {...register('address', { required: 'Street address is required' })} className="input" placeholder="Auto-filled when you select a location" />
+            <label className="label">
+              Street Address {isNew && <span className="text-danger-400">*</span>}
+            </label>
+            <input 
+              {...register('address', { validate: validateAddress })} 
+              className="input" 
+              placeholder={isNew ? "Auto-filled when you select a location" : "Edit if needed"} 
+            />
             {errors.address && (
               <p className="mt-1 text-xs text-danger-400 flex items-center gap-1">
                 <AlertCircle size={11} /> {errors.address.message}
