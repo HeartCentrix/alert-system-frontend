@@ -9,6 +9,7 @@ import LocationAutocompleteInput from '@/components/LocationAutocompleteInput'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
 import { useIsDocumentVisible } from '@/hooks/useVisibility'
+import ModalPortal from '@/components/ui/ModalPortal'
 
 // ─── GROUPS ───────────────────────────────────────────────────────────────────
 
@@ -119,12 +120,13 @@ function GroupModal({ group, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-lg animate-fade-in">
-        <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-          <h2 className="font-display font-semibold text-white">{group ? 'Edit Group' : 'New Group'}</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
-        </div>
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="card w-full max-w-lg animate-fade-in">
+          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+            <h2 className="font-display font-semibold text-white">{group ? 'Edit Group' : 'New Group'}</h2>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+          </div>
         <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
           <div>
             <label className="label">Group Name *</label>
@@ -245,6 +247,7 @@ function GroupModal({ group, onClose, onSaved }) {
         </form>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -312,19 +315,20 @@ function GroupMembersModal({ group, onClose, onSaved }) {
     }
   }
 
-  // Can manage members if: admin+, OR (manager+ AND member of this group)
+  // Can manage members if: elevated role, OR manager+ AND member of this group
   const canManageMembers = isManagerOrAbove && (isAdminOrAbove || isMemberOfGroup)
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-2xl animate-fade-in max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-          <div>
-            <h2 className="font-display font-semibold text-white">Manage Members</h2>
-            <p className="text-slate-500 text-sm mt-1">{group.name}</p>
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="card w-full max-w-2xl animate-fade-in max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+            <div>
+              <h2 className="font-display font-semibold text-white">Manage Members</h2>
+              <p className="text-slate-500 text-sm mt-1">{group.name}</p>
+            </div>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
-        </div>
 
         <div className="p-5 space-y-4 flex-1 overflow-y-auto">
           {/* Current Members */}
@@ -448,6 +452,7 @@ function GroupMembersModal({ group, onClose, onSaved }) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -494,7 +499,7 @@ export function GroupsPage() {
   
   // Check if user can manage members for a specific group
   // Manager: can only manage groups they are a member of
-  // Admin/Super Admin: can manage all groups
+  // Elevated roles: can manage all groups
   const canManageGroupMembers = (group) => {
     if (!isManagerOrAbove) return false
     if (isAdminOrAbove) return true
@@ -744,12 +749,13 @@ function LocationModal({ location, onClose, onSaved }) {
   }
   
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-lg animate-fade-in">
-        <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-          <h2 className="font-display font-semibold text-white">{location ? 'Edit Location' : 'New Location'}</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
-        </div>
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="card w-full max-w-lg animate-fade-in">
+          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+            <h2 className="font-display font-semibold text-white">{location ? 'Edit Location' : 'New Location'}</h2>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+          </div>
         <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
           <div>
             <label className="label">
@@ -855,6 +861,7 @@ function LocationModal({ location, onClose, onSaved }) {
         </form>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -1011,12 +1018,13 @@ export function TemplatesPage() {
       finally { setLoading(false) }
     }
     return (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="card w-full max-w-lg animate-fade-in">
-          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-            <h2 className="font-display font-semibold text-white">{template ? 'Edit Template' : 'New Template'}</h2>
-            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
-          </div>
+      <ModalPortal>
+        <div className="modal-overlay">
+          <div className="card w-full max-w-lg animate-fade-in">
+            <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+              <h2 className="font-display font-semibold text-white">{template ? 'Edit Template' : 'New Template'}</h2>
+              <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+            </div>
           <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
             <div><label className="label">Template Name *</label><input {...register('name', { required: true })} className="input" /></div>
             <div>
@@ -1040,6 +1048,7 @@ export function TemplatesPage() {
           </form>
         </div>
       </div>
+    </ModalPortal>
     )
   }
 
@@ -1163,12 +1172,13 @@ export function IncidentsPage() {
       finally { setLoading(false) }
     }
     return (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="card w-full max-w-md animate-fade-in">
-          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-            <h2 className="font-display font-semibold text-white">{incident ? 'Update Incident' : 'New Incident'}</h2>
-            <button onClick={onClose} className="text-slate-500 text-xl">×</button>
-          </div>
+      <ModalPortal>
+        <div className="modal-overlay">
+          <div className="card w-full max-w-md animate-fade-in">
+            <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+              <h2 className="font-display font-semibold text-white">{incident ? 'Update Incident' : 'New Incident'}</h2>
+              <button onClick={onClose} className="text-slate-500 text-xl">×</button>
+            </div>
           <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
             <div><label className="label">Title *</label><input {...register('title', { required: true })} className="input" /></div>
             <div className="grid grid-cols-2 gap-3">
@@ -1204,6 +1214,7 @@ export function IncidentsPage() {
           </form>
         </div>
       </div>
+    </ModalPortal>
     )
   }
 

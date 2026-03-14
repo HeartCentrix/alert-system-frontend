@@ -6,10 +6,10 @@ import { usersAPI, groupsAPI } from '@/services/api'
 import { getInitials, cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import useAuthStore from '@/store/authStore'
+import ModalPortal from '@/components/ui/ModalPortal'
 
 const ROLES = ['viewer', 'manager', 'admin', 'super_admin']
 
-// Generate a secure temporary password
 function generateTempPassword() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
   const length = 16
@@ -23,7 +23,6 @@ function generateTempPassword() {
   for (let i = password.length; i < length; i++) {
     password += chars[Math.floor(Math.random() * chars.length)]
   }
-  // Shuffle the password
   return password.split('').sort(() => Math.random() - 0.5).join('')
 }
 
@@ -67,7 +66,7 @@ function UserModal({ user, onClose, onSaved }) {
 
   // Fetch filter options for Department and Title dropdowns
   const { data: filterOptionsData } = useQuery({
-    queryKey: ['group-filter-options'], // Same key as OtherPages for shared cache
+    queryKey: ['group-filter-options'], // Shared with OtherPages for consistent cache
     queryFn: () => groupsAPI.getFilterOptions().then(r => r.data),
     staleTime: 0, // Always refetch to get latest departments/titles
     refetchOnWindowFocus: 'always',
@@ -76,7 +75,6 @@ function UserModal({ user, onClose, onSaved }) {
   // Reset form when user prop changes (prevents stale values on re-mount)
   useEffect(() => {
     reset(user || { role: 'viewer', preferred_channels: ['sms', 'email'] })
-    // Reset generated password state when modal opens/closes
     setGeneratedPassword(null)
     setShowPassword(false)
   }, [user, reset])
@@ -117,7 +115,6 @@ function UserModal({ user, onClose, onSaved }) {
         onSaved()
         onClose()
       } else {
-        // Generate secure password if not provided
         const password = data.password || generateTempPassword()
         console.log('Creating user with data:', { ...cleanedData, password })
         await usersAPI.create({ ...cleanedData, password })
@@ -125,10 +122,8 @@ function UserModal({ user, onClose, onSaved }) {
         // Invalidate and refetch filter options to include new department/title
         await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
 
-        // Show generated password if it was auto-generated
         if (!data.password) {
           setGeneratedPassword(password)
-          // Don't close modal - let user copy the password first
           toast.success('User created! Copy the password below')
           // Reset form to prevent re-submission
           reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
@@ -176,7 +171,6 @@ function UserModal({ user, onClose, onSaved }) {
               }
             }
             
-            // Password validation messages
             if (field === 'password') {
               if (rawMsg.includes('8')) {
                 friendlyMsg = 'Password must be at least 8 characters'
@@ -217,12 +211,13 @@ function UserModal({ user, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in">
-        <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
-          <h2 className="font-display font-semibold text-white">{user ? 'Edit Person' : 'Add Person'}</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl leading-none">×</button>
-        </div>
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in">
+          <div className="p-5 border-b border-surface-700/40 flex items-center justify-between">
+            <h2 className="font-display font-semibold text-white">{user ? 'Edit Person' : 'Add Person'}</h2>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl leading-none">×</button>
+          </div>
         <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -393,16 +388,17 @@ function UserModal({ user, onClose, onSaved }) {
         </form>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
 function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
   const [loading, setLoading] = useState(false)
-  
+
   const selectedUsersData = allUsers.filter(u => selectedUsers.has(u.id))
   const currentUser = useAuthStore(state => state.user)
   const isSelfSelected = selectedUsers.has(currentUser?.id)
-  
+
   // Filter out current user from deletion
   const usersToDelete = selectedUsersData.filter(u => u.id !== currentUser?.id)
 
@@ -418,18 +414,19 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-md animate-fade-in">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-danger-900/30 flex items-center justify-center shrink-0">
-              <AlertTriangle size={24} className="text-danger-400" />
+    <ModalPortal>
+      <div className="modal-overlay">
+        <div className="card w-full max-w-md animate-fade-in">
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-danger-900/30 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} className="text-danger-400" />
+              </div>
+              <div>
+                <h2 className="font-display font-semibold text-white text-lg">Delete Users Permanently</h2>
+                <p className="text-slate-400 text-sm">This action cannot be undone</p>
+              </div>
             </div>
-            <div>
-              <h2 className="font-display font-semibold text-white text-lg">Delete Users Permanently</h2>
-              <p className="text-slate-400 text-sm">This action cannot be undone</p>
-            </div>
-          </div>
 
           <div className="mb-4">
             <p className="text-slate-300 mb-3">
@@ -490,6 +487,7 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -516,9 +514,11 @@ export default function PeoplePage() {
   const currentUser = useAuthStore(state => state.user)
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['users', page, search],
     queryFn: () => usersAPI.list({ page, page_size: 20, search: search || undefined }).then(r => r.data),
+    refetchInterval: 30000, // Refresh every 30 seconds to show real-time online status
+    refetchIntervalInBackground: true, // Also refresh when tab is in background
   })
 
   const deleteMutation = useMutation({

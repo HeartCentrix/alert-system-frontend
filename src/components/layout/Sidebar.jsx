@@ -68,14 +68,14 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) 
         />
       )}
 
-      {/* Toggle Button - Outside sidebar at top-right (desktop only) */}
+      {/* Toggle Button - Outside sidebar at top-right (desktop and mobile) */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={toggleSidebar}
               className={cn(
-                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0 hidden lg:flex',
+                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
                 'w-11 h-11 min-w-[44px] min-h-[44px]',
                 'rounded-lg',
                 'bg-surface-900 border border-surface-700/60',
