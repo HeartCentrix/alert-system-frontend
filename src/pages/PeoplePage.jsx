@@ -523,7 +523,7 @@ export default function PeoplePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => usersAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); toast.success('User deleted') },
     onError: (error) => {
       const errorMessage = error.response?.data?.detail || 
                           (typeof error.response?.data?.detail === 'object' 
@@ -537,6 +537,8 @@ export default function PeoplePage() {
     mutationFn: (userIds) => usersAPI.bulkDelete(userIds),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      qc.invalidateQueries({ queryKey: ['map-data'] })
       setSelectedUsers(new Set())
       setBulkDeleteModal(false)
 
@@ -596,8 +598,10 @@ export default function PeoplePage() {
       }
 
       qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      qc.invalidateQueries({ queryKey: ['map-data'] })
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 
+      const errorMessage = error.response?.data?.detail ||
                           (typeof error.response?.data?.detail === 'object' 
                             ? error.response.data.detail.message 
                             : 'Import failed')
@@ -865,7 +869,7 @@ export default function PeoplePage() {
           onClose={() => {
             setModal(null)
           }}
-          onSaved={() => qc.invalidateQueries({ queryKey: ['users'] })}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); }}
         />
       )}
 
