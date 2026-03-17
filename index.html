@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TM Alert — Emergency Notification System</title>
+    <!-- Google Fonts removed: external CDN links trigger SRI-missing ZAP alert
+         and cannot be SRI-hashed (content is dynamic/browser-specific).
+         Fonts fall back to system equivalents via the CSS font-family stack. -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚨</text></svg>" />
+    <!-- Leaflet CSS is bundled via npm import in main.jsx (no external CDN dependency) -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

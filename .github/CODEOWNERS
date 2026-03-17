@@ -1,0 +1,29 @@
+# Code Owners for TM Alert Frontend
+# Automatically request reviews from designated users for specific files
+
+# Default owners for everything in the repo
+*    @rsharmaHC
+
+# Core application files
+/src/    @rsharmaHC
+
+# Component files
+/src/components/    @rsharmaHC
+
+# Page files
+/src/pages/    @rsharmaHC
+
+# Hooks
+/src/hooks/    @rsharmaHC
+
+# Tests
+/src/tests/    @rsharmaHC
+
+# Configuration files
+/package.json    @rsharmaHC
+/vite.config.*    @rsharmaHC
+/tailwind.config.*    @rsharmaHC
+/tsconfig.*    @rsharmaHC
+
+# CI/CD workflows
+/.github/workflows/    @rsharmaHC
