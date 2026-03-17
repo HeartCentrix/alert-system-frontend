@@ -303,8 +303,8 @@ export function NotificationDetailPage() {
               <h3 className="text-sm font-semibold text-white">Delivery Log</h3>
               <p className="text-xs text-slate-500">{delivery?.length || 0} entries</p>
             </div>
-            <div className="max-h-72 overflow-y-auto">
-              <table className="w-full">
+            <div className="max-h-72 overflow-auto">
+              <table className="w-full min-w-[500px]">
                 <thead className="sticky top-0 bg-surface-900">
                   <tr className="border-b border-surface-700/40">
                     <th className="text-left text-xs font-medium text-slate-500 px-4 py-2">Person</th>
@@ -316,9 +316,9 @@ export function NotificationDetailPage() {
                 <tbody>
                   {delivery?.map(log => (
                     <tr key={log.id} className="table-row text-sm">
-                      <td className="px-4 py-2 text-slate-300">{log.user_name || '—'}</td>
-                      <td className="px-3 py-2">{channelIcon(log.channel)} {channelLabel(log.channel)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-2 text-slate-300 whitespace-nowrap">{log.user_name || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{channelIcon(log.channel)} {channelLabel(log.channel)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
                         <span className={cn(
                           'badge',
                           log.status === 'delivered' ? 'badge-green' :
@@ -326,7 +326,7 @@ export function NotificationDetailPage() {
                           log.status === 'failed' ? 'badge-red' : 'badge-gray'
                         )}>{log.status}</span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-500 font-mono">{maskPII(log.to_address)}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500 font-mono whitespace-nowrap">{maskPII(log.to_address)}</td>
                     </tr>
                   ))}
                   {!delivery?.length && (
