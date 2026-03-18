@@ -86,6 +86,108 @@ function normalizePydanticError(errorItem) {
   return `${fieldName} is invalid`
 }
 
+// ── Individual format extractors ──────────────────────────────────────────────
+
+function extractFromStringError(error) {
+  if (typeof error === 'string') {
+    return { messages: [error || 'An error occurred'] }
+  }
+  return null
+}
+
+function extractFromStringData(data) {
+  if (typeof data === 'string') {
+    return { messages: [data] }
+  }
+  return null
+}
+
+function extractFromDetailString(data) {
+  if (data?.detail && typeof data.detail === 'string') {
+    return { messages: [data.detail] }
+  }
+  return null
+}
+
+function extractFromDetailArray(data) {
+  if (!Array.isArray(data?.detail)) return null
+  const messages = data.detail
+    .map((err) => normalizePydanticError(err))
+    .filter((msg) => msg && msg.length > 0)
+  if (messages.length > 0) {
+    return { title: 'Validation Error', messages }
+  }
+  return null
+}
+
+function normalizeErrorsItem(err) {
+  if (err.type || err.loc) return normalizePydanticError(err)
+  if (typeof err.message === 'string') return err.message
+  return normalizePydanticError(err)
+}
+
+function extractFromErrorsArray(data) {
+  if (!Array.isArray(data?.errors)) return null
+  const messages = data.errors
+    .map(normalizeErrorsItem)
+    .filter((msg) => msg && msg.length > 0)
+  if (messages.length > 0) {
+    return { title: 'Validation Error', messages }
+  }
+  return null
+}
+
+function extractFromMessage(data) {
+  if (!data?.message) return null
+  if (Array.isArray(data.message)) {
+    return { messages: data.message.filter((msg) => msg && typeof msg === 'string') }
+  }
+  if (typeof data.message === 'string') {
+    return { messages: [data.message] }
+  }
+  return null
+}
+
+function extractFromErrorField(data) {
+  if (data?.error && typeof data.error === 'string') {
+    return { messages: [data.error] }
+  }
+  return null
+}
+
+function extractFromNetworkError(error) {
+  if (error?.code === 'ECONNREFUSED') {
+    return {
+      title: 'Connection Error',
+      messages: ['Unable to connect to the server. Please check your connection and try again.'],
+    }
+  }
+  if (error?.code === 'ENOTFOUND') {
+    return {
+      title: 'Network Error',
+      messages: ['Cannot reach the server. Please check your network connection.'],
+    }
+  }
+  if (error?.request && !error?.response) {
+    return {
+      title: 'Network Error',
+      messages: ['No response from server. Please check your internet connection.'],
+    }
+  }
+  return null
+}
+
+function extractFromObjectFallback(data) {
+  if (!data || typeof data !== 'object') return null
+  const possibleMessages = ['detail', 'message', 'error', 'errorMessage', 'errorMsg']
+  for (const key of possibleMessages) {
+    if (data[key] && typeof data[key] === 'string') {
+      return { messages: [data[key]] }
+    }
+  }
+  return null
+}
+
 /**
  * Extract and normalize error messages from an API error response.
  * 
@@ -99,139 +201,27 @@ function normalizePydanticError(errorItem) {
  * @returns {{ title?: string, messages: string[] }} - Normalized error with optional title and message list
  */
 export function normalizeApiError(error) {
-  // Default response
   const defaultResponse = {
     title: undefined,
     messages: ['An unexpected error occurred. Please try again.'],
   }
 
-  // Handle null/undefined
-  if (!error) {
-    return defaultResponse
-  }
+  if (!error) return defaultResponse
 
-  // Handle plain string errors
-  if (typeof error === 'string') {
-    return {
-      messages: [error || 'An error occurred'],
-    }
-  }
-
-  // Extract response data from axios error
   const data = error?.response?.data || error?.detail || error
 
-  // Handle case where data is a string
-  if (typeof data === 'string') {
-    return {
-      messages: [data],
-    }
-  }
-
-  // Handle case where data.detail is a string
-  if (data?.detail && typeof data.detail === 'string') {
-    return {
-      messages: [data.detail],
-    }
-  }
-
-  // Handle Pydantic/FastAPI validation errors (array of error objects)
-  // Format: { detail: [{ type, loc, msg, input, ctx }, ...] }
-  if (Array.isArray(data?.detail)) {
-    const messages = data.detail
-      .map((err) => normalizePydanticError(err))
-      .filter((msg) => msg && msg.length > 0)
-    
-    if (messages.length > 0) {
-      return {
-        title: 'Validation Error',
-        messages,
-      }
-    }
-  }
-
-  // Handle { errors: [...] } format
-  if (Array.isArray(data?.errors)) {
-    const messages = data.errors
-      .map((err) => {
-        // Handle both Pydantic-style and generic error objects
-        if (err.type || err.loc) {
-          return normalizePydanticError(err)
-        }
-        // Handle { field, message } format
-        if (typeof err.message === 'string') {
-          return err.message
-        }
-        return normalizePydanticError(err)
-      })
-      .filter((msg) => msg && msg.length > 0)
-    
-    if (messages.length > 0) {
-      return {
-        title: 'Validation Error',
-        messages,
-      }
-    }
-  }
-
-  // Handle { message: "..." } format (single string or array)
-  if (data?.message) {
-    if (Array.isArray(data.message)) {
-      return {
-        messages: data.message.filter((msg) => msg && typeof msg === 'string'),
-      }
-    }
-    if (typeof data.message === 'string') {
-      return {
-        messages: [data.message],
-      }
-    }
-  }
-
-  // Handle { error: "..." } format
-  if (data?.error && typeof data.error === 'string') {
-    return {
-      messages: [data.error],
-    }
-  }
-
-  // Handle network errors
-  if (error?.code === 'ECONNREFUSED') {
-    return {
-      title: 'Connection Error',
-      messages: ['Unable to connect to the server. Please check your connection and try again.'],
-    }
-  }
-
-  if (error?.code === 'ENOTFOUND') {
-    return {
-      title: 'Network Error',
-      messages: ['Cannot reach the server. Please check your network connection.'],
-    }
-  }
-
-  // Handle axios network error without response
-  if (error?.request && !error?.response) {
-    return {
-      title: 'Network Error',
-      messages: ['No response from server. Please check your internet connection.'],
-    }
-  }
-
-  // Fallback: try to extract any meaningful message
-  if (data && typeof data === 'object') {
-    // Try to find any string property that might contain the error
-    const possibleMessages = ['detail', 'message', 'error', 'errorMessage', 'errorMsg']
-    for (const key of possibleMessages) {
-      if (data[key] && typeof data[key] === 'string') {
-        return {
-          messages: [data[key]],
-        }
-      }
-    }
-  }
-
-  // Ultimate fallback
-  return defaultResponse
+  return (
+    extractFromStringError(error) ||
+    extractFromStringData(data) ||
+    extractFromDetailString(data) ||
+    extractFromDetailArray(data) ||
+    extractFromErrorsArray(data) ||
+    extractFromMessage(data) ||
+    extractFromErrorField(data) ||
+    extractFromNetworkError(error) ||
+    extractFromObjectFallback(data) ||
+    defaultResponse
+  )
 }
 
 /**
