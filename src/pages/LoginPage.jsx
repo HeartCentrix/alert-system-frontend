@@ -10,18 +10,7 @@ import TFAChallengeStep from '@/components/auth/TFAChallengeStep'
 import MFARecoveryCodesDisplay from '@/components/auth/MFARecoveryCodesDisplay'
 import RecoveryCodeLoginForm from '@/components/auth/RecoveryCodeLoginForm'
 import LocalLoginForm from '@/components/auth/LocalLoginForm'
-
-// Shared background styles to reduce duplication
-const PAGE_BACKGROUND = {
-  backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.15) 0%, transparent 70%)'
-}
-
-const GRID_OVERLAY = {
-  backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-  backgroundSize: '40px 40px',
-  opacity: 0.03,
-  pointerEvents: 'none'
-}
+import LoginPageWrapper from '@/components/auth/LoginPageWrapper'
 
 const LOGO_SECTION = (
   <div className="flex items-center gap-3 justify-center mb-6 sm:mb-8">
@@ -260,14 +249,9 @@ export default function LoginPage() {
 
   // Helper to render MFA/auth wrapper with consistent styling
   const renderAuthWrapper = (children) => (
-    <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4" style={PAGE_BACKGROUND}>
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={GRID_OVERLAY} />
-      <div className="w-full max-w-md animate-fade-in">
-        <div className="card p-8">
-          {children}
-        </div>
-      </div>
-    </div>
+    <LoginPageWrapper logoSection={LOGO_SECTION} footerText={FOOTER_TEXT}>
+      <div className="card p-8">{children}</div>
+    </LoginPageWrapper>
   )
 
   // Render MFA setup step
@@ -335,107 +319,91 @@ export default function LoginPage() {
   // Render local-only login
   if (authProviders.local_enabled && !authProviders.entra_enabled && !authProviders.ldap_enabled) {
     return (
-      <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4 sm:p-6" style={PAGE_BACKGROUND}>
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={GRID_OVERLAY} />
-        <div className="w-full max-w-md animate-fade-in">
-          {LOGO_SECTION}
-          <div className="card p-6 sm:p-8">
-            <h1 className="font-display font-semibold text-xl text-white mb-1">Sign in</h1>
-            <p className="text-slate-500 text-sm mb-6">Access the Taylor Morrison alert platform</p>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <LocalLoginForm
-                register={register}
-                errors={errors}
-                showPass={showPass}
-                setShowPass={setShowPass}
-                loading={loading}
-                countdown={countdown}
-                formatCountdown={formatCountdown}
-                onSubmit={onSubmit}
-                onForgotPassword={() => {}}
-              />
-            </form>
-          </div>
-          {FOOTER_TEXT}
-        </div>
-      </div>
+      <LoginPageWrapper logoSection={LOGO_SECTION} footerText={FOOTER_TEXT}>
+        <h1 className="font-display font-semibold text-xl text-white mb-1">Sign in</h1>
+        <p className="text-slate-500 text-sm mb-6">Access the Taylor Morrison alert platform</p>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <LocalLoginForm
+            register={register}
+            errors={errors}
+            showPass={showPass}
+            setShowPass={setShowPass}
+            loading={loading}
+            countdown={countdown}
+            formatCountdown={formatCountdown}
+            onForgotPassword={() => {}}
+          />
+        </form>
+      </LoginPageWrapper>
     )
   }
 
   // Render combined login (multiple providers enabled)
   return (
-    <div className="min-h-screen bg-surface-950 flex items-center justify-center p-4 sm:p-6" style={PAGE_BACKGROUND}>
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={GRID_OVERLAY} />
-      <div className="w-full max-w-md animate-fade-in">
-        {LOGO_SECTION}
+    <LoginPageWrapper logoSection={LOGO_SECTION} footerText={FOOTER_TEXT}>
+      <h1 className="font-display font-semibold text-xl text-white mb-1">Sign in</h1>
+      <p className="text-slate-500 text-sm mb-6">Access the Taylor Morrison alert platform</p>
 
-        <div className="card p-6 sm:p-8">
-          <h1 className="font-display font-semibold text-xl text-white mb-1">Sign in</h1>
-          <p className="text-slate-500 text-sm mb-6">Access the Taylor Morrison alert platform</p>
+      {/* SSO Buttons Section */}
+      <div className="space-y-3 mb-6">
+        {authProviders.entra_enabled && (
+          <button
+            type="button"
+            onClick={() => {
+              const baseUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8000'
+              window.location.href = `${baseUrl}/api/v1/auth/entra/login`
+            }}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors text-white"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+              <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+              <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+              <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+            </svg>
+            Sign in with Microsoft
+          </button>
+        )}
 
-          {/* SSO Buttons Section */}
-          <div className="space-y-3 mb-6">
-            {authProviders.entra_enabled && (
-              <button
-                type="button"
-                onClick={() => {
-                  const baseUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8000'
-                  window.location.href = `${baseUrl}/api/v1/auth/entra/login`
-                }}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors text-white"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
-                  <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
-                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
-                  <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
-                </svg>
-                Sign in with Microsoft
-              </button>
-            )}
-
-            {authProviders.ldap_enabled && (
-              <button
-                type="button"
-                onClick={() => navigate('/company-login')}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors text-white"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Sign in with Company Account
-              </button>
-            )}
-          </div>
-
-          {authProviders.local_enabled && (authProviders.entra_enabled || authProviders.ldap_enabled) && (
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-surface-600" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-surface-900 text-slate-500">or sign in with email</span>
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {authProviders.local_enabled && (
-              <LocalLoginForm
-                register={register}
-                errors={errors}
-                showPass={showPass}
-                setShowPass={setShowPass}
-                loading={loading}
-                countdown={countdown}
-                formatCountdown={formatCountdown}
-                onForgotPassword
-              />
-            )}
-          </form>
-        </div>
-        {FOOTER_TEXT}
+        {authProviders.ldap_enabled && (
+          <button
+            type="button"
+            onClick={() => navigate('/company-login')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors text-white"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            Sign in with Company Account
+          </button>
+        )}
       </div>
-    </div>
+
+      {authProviders.local_enabled && (authProviders.entra_enabled || authProviders.ldap_enabled) && (
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-surface-600" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-surface-900 text-slate-500">or sign in with email</span>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {authProviders.local_enabled && (
+          <LocalLoginForm
+            register={register}
+            errors={errors}
+            showPass={showPass}
+            setShowPass={setShowPass}
+            loading={loading}
+            countdown={countdown}
+            formatCountdown={formatCountdown}
+            onForgotPassword
+          />
+        )}
+      </form>
+    </LoginPageWrapper>
   )
 }
