@@ -22,9 +22,9 @@ const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: blob: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com https://api.qrserver.com",
     // Fonts served from own origin only (no external CDN after removing Google Fonts link)
     "font-src 'self'",
-    // ws://localhost:3000 needed for Vite HMR WebSocket
+    // ws://localhost:3000 needed for Vite HMR WebSocket (dynamic port via env)
     // 'self' for @vite/client HMR connection
-    "connect-src 'self' http://localhost:8000 ws://localhost:3000 blob:",
+    "connect-src 'self' http://localhost:8000 ws://localhost:3000 ws://localhost:3001 ws://localhost:5173 blob:",
     "frame-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
@@ -401,7 +401,7 @@ export default defineConfig({
   },
 
   server: {
-    port: 3000,
+    port: parseInt(process.env.PORT || '3000', 10),
     host: 'localhost', // Restrict to localhost only — prevents external network scanning
 
     /**

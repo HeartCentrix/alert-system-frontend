@@ -12,6 +12,14 @@ import { getPrimaryErrorMessage } from '@/utils/errorHandler'
 export default function SettingsPage() {
   const { user } = useAuthStore()
   const [tab, setTab] = useState('profile')
+  const [authProviders, setAuthProviders] = useState(null)
+
+  // Fetch auth providers on mount
+  useEffect(() => {
+    authAPI.getProviders()
+      .then(({ data }) => setAuthProviders(data))
+      .catch(() => setAuthProviders(null))
+  }, [])
 
   const tabs = [
     { id: 'profile', label: 'My Profile', icon: User },
@@ -50,7 +58,7 @@ export default function SettingsPage() {
       </div>
 
       {tab === 'profile' && <ProfileTab user={user} />}
-      {tab === 'security' && <MFAManagementTab />}
+      {tab === 'security' && <MFAManagementTab authProviders={authProviders} />}
       {tab === 'password' && <PasswordTab />}
       {tab === 'notifications' && <PreferencesTab user={user} />}
     </div>
