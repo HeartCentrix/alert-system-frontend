@@ -39,9 +39,11 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
   const [searchQuery, setSearchQuery] = useState('')
 
   // Fetch users for dropdown
+  // Note: Don't filter by is_active - that tracks online presence, not account status
+  // We want to show all verified users (including SSO/LDAP users who may be offline)
   const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery({
-    queryKey: ['users', 'active'],
-    queryFn: () => usersAPI.list({ is_active: true }).then(r => r.data?.items || []).catch(err => {
+    queryKey: ['users', 'all'],
+    queryFn: () => usersAPI.list({}).then(r => r.data?.items || []).catch(err => {
       console.error('Failed to load users:', err)
       return []
     }),

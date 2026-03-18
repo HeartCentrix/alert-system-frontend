@@ -109,7 +109,8 @@ function UserModal({ user, onClose, onSaved }) {
 
       if (user?.id) {
         await usersAPI.update(user.id, cleanedData)
-        // Invalidate and refetch filter options to include new department/title
+        // Invalidate users list and filter options to reflect changes
+        await queryClient.invalidateQueries({ queryKey: ['users'], refetchType: 'all' })
         await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
         toast.success('User updated')
         onSaved()
