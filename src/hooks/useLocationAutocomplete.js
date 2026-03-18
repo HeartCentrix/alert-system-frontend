@@ -16,6 +16,16 @@ const CACHE_STORAGE_KEY = 'geocode_cache_v3'
 // generates unnecessary API calls.
 const DEFAULT_MAX_CACHE_SIZE = 200  // increased from 20 — each entry is ~2-5KB
 
+// ── Fetch error resolver (extracted to reduce fetchResults complexity) ────────
+
+function resolveAutocompleteError(err) {
+  const status = err.response?.status
+  if (status === 429) return 'Too many requests. Please wait a moment.'
+  if (status === 503) return 'Location service temporarily unavailable.'
+  if (status === 400) return err.response?.data?.detail || 'Invalid search query.'
+  return 'Failed to fetch location suggestions.'
+}
+
 /**
  * Location Autocomplete Hook with Permanent Caching
  *
@@ -241,19 +251,8 @@ export function useLocationAutocomplete(options = {}) {
       if (err.name === 'AbortError' || err.name === 'CanceledError') {
         return
       }
-
       console.error('Location autocomplete error:', err)
-
-      if (err.response?.status === 429) {
-        setError('Too many requests. Please wait a moment.')
-      } else if (err.response?.status === 503) {
-        setError('Location service temporarily unavailable.')
-      } else if (err.response?.status === 400) {
-        setError(err.response?.data?.detail || 'Invalid search query.')
-      } else {
-        setError('Failed to fetch location suggestions.')
-      }
-
+      setError(resolveAutocompleteError(err))
       setResults([])
     } finally {
       setLoading(false)

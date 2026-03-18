@@ -124,15 +124,30 @@ export default function LoginPage() {
       setCountdown(null)
       navigate('/dashboard')
     } catch (err) {
-      const message = err.response?.data?.detail || err.message || 'Invalid credentials'
-      const retryAfterSeconds = err.response?.headers?.['retry-after'] || err.response?.headers?.['Retry-After']
-
+      const detail = err.response?.data?.detail || err.message || 'Invalid credentials'
+      
+      // Handle structured error response (with remaining_attempts or retry_after)
+      let message = detail
+      let retryAfterSeconds = err.response?.headers?.['retry-after'] || err.response?.headers?.['Retry-After']
+      
+      // Check if detail is an object
+      if (typeof detail === 'object') {
+        if (detail.message) {
+          message = detail.message
+        }
+        if (detail.remaining_attempts !== undefined) {
+          message = `${detail.message}. ${detail.remaining_attempts} attempts remaining.`
+        }
+        if (detail.retry_after_seconds !== undefined) {
+          retryAfterSeconds = detail.retry_after_seconds
+        }
+      }
+      
       if (retryAfterSeconds) {
         const seconds = parseInt(retryAfterSeconds)
         setLockoutExpiry(Date.now() + (seconds * 1000))
         toast.error(`${message}. Try again in ${formatCountdown(seconds)}.`)
       } else {
-        // Don't show error for MFA flows
         toast.error(message)
       }
     } finally {
@@ -151,8 +166,31 @@ export default function LoginPage() {
       setCountdown(null)
       navigate('/dashboard')
     } catch (err) {
-      const message = err.response?.data?.detail || err.message || 'Invalid credentials'
-      toast.error(message)
+      const detail = err.response?.data?.detail || err.message || 'Invalid credentials'
+      
+      // Handle structured error response
+      let message = detail
+      let retryAfterSeconds = err.response?.headers?.['retry-after'] || err.response?.headers?.['Retry-After']
+      
+      if (typeof detail === 'object') {
+        if (detail.message) {
+          message = detail.message
+        }
+        if (detail.remaining_attempts !== undefined) {
+          message = `${detail.message}. ${detail.remaining_attempts} attempts remaining.`
+        }
+        if (detail.retry_after_seconds !== undefined) {
+          retryAfterSeconds = detail.retry_after_seconds
+        }
+      }
+      
+      if (retryAfterSeconds) {
+        const seconds = parseInt(retryAfterSeconds)
+        setLockoutExpiry(Date.now() + (seconds * 1000))
+        toast.error(`${message}. Try again in ${formatCountdown(seconds)}.`)
+      } else {
+        toast.error(message)
+      }
     } finally {
       setLoading(false)
     }
