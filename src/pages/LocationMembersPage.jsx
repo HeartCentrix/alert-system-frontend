@@ -39,9 +39,11 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
   const [searchQuery, setSearchQuery] = useState('')
 
   // Fetch users for dropdown
+  // Note: Don't filter by is_active - that tracks online presence, not account status
+  // We want to show all verified users (including SSO/LDAP users who may be offline)
   const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery({
-    queryKey: ['users', 'active'],
-    queryFn: () => usersAPI.list({ is_active: true }).then(r => r.data?.items || []).catch(err => {
+    queryKey: ['users', 'all'],
+    queryFn: () => usersAPI.list({}).then(r => r.data?.items || []).catch(err => {
       console.error('Failed to load users:', err)
       return []
     }),
@@ -387,21 +389,9 @@ export default function LocationMembersPage() {
   const [statusFilter, setStatusFilter] = useState('active')
   const [typeFilter, setTypeFilter] = useState('all')
 
-  // Validate locationId
-  if (!locationId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center text-slate-500">
-          <AlertCircle size={48} className="mx-auto mb-3 opacity-50" />
-          <p className="text-lg">No location selected</p>
-          <p className="text-sm mt-1">Please select a location from the Locations page</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Fetch location members
+  // All hooks must be called unconditionally — before any early return
   const isVisible = useIsDocumentVisible()
+
   const { data: membersData, isLoading, refetch } = useQuery({
     queryKey: ['location-members', locationId, statusFilter, typeFilter],
     queryFn: () => {
@@ -416,10 +406,10 @@ export default function LocationMembersPage() {
         return { total: 0, items: [] }
       })
     },
+    enabled: !!locationId,
     refetchInterval: isVisible ? 30000 : false,
   })
 
-  // Fetch location details
   const { data: location } = useQuery({
     queryKey: ['location', locationId],
     queryFn: async () => {
@@ -434,26 +424,37 @@ export default function LocationMembersPage() {
     enabled: !!locationId,
   })
 
-  // Remove user mutation
   const removeMutation = useMutation({
     mutationFn: ({ userId, reason }) =>
       locationAudienceAPI.removeUser(userId, locationId, reason),
     onSuccess: () => {
       toast.success('User removed from location')
-      // Invalidate all map-related queries for real-time updates
       qc.invalidateQueries({ queryKey: ['locations-map'] })
       qc.invalidateQueries({ queryKey: ['map-data'] })
       refetch()
       setRemoveConfirm(null)
     },
     onError: (error) => {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
+      const errorMessage = error.response?.data?.detail ||
+                          (typeof error.response?.data?.detail === 'object'
+                            ? error.response.data.detail.message
                             : 'Failed to remove user')
       toast.error(errorMessage || 'Failed to remove user')
     },
   })
+
+  // Guard render — hooks already called above, safe to return early here
+  if (!locationId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center text-slate-500">
+          <AlertCircle size={48} className="mx-auto mb-3 opacity-50" />
+          <p className="text-lg">No location selected</p>
+          <p className="text-sm mt-1">Please select a location from the Locations page</p>
+        </div>
+      </div>
+    )
+  }
 
   const handleRemove = (member) => {
     if (window.confirm(`Remove ${member.user_name} from this location?`)) {
