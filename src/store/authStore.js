@@ -168,10 +168,55 @@ const useAuthStore = create((set, get) => ({
       mfaQRCodeURI: null,
       mfaSecret: null,
     })
-    
+
     // Start heartbeat after successful login
     get().startHeartbeat()
-    
+
+    return data
+  },
+
+  setTokensFromSSO: async (accessToken, refreshToken) => {
+    // Store tokens
+    saveAccessToken(accessToken)
+    saveRefreshToken(refreshToken)
+    set({ accessToken, refreshToken })
+
+    // Fetch user profile using the new token
+    try {
+      const { data } = await authAPI.me()
+      set({
+        user: data,
+        isAuthenticated: true,
+        isLoading: false,
+      })
+      // Start heartbeat after successful SSO login
+      get().startHeartbeat()
+    } catch (err) {
+      // Token invalid — clear everything
+      clearAccessToken()
+      clearRefreshToken()
+      set({ user: null, isAuthenticated: false, accessToken: null, refreshToken: null })
+      throw err
+    }
+  },
+
+  ldapLogin: async (username, password) => {
+    const { data } = await authAPI.ldapLogin(username, password)
+    saveAccessToken(data.access_token)
+    if (data.refresh_token) saveRefreshToken(data.refresh_token)
+    set({
+      user: data.user,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      isAuthenticated: true,
+      isLoading: false,
+      mfaState: null,
+      mfaChallengeToken: null,
+      mfaQRCodeURI: null,
+      mfaSecret: null,
+    })
+    // Start heartbeat after successful LDAP login
+    get().startHeartbeat()
     return data
   },
 
