@@ -47,8 +47,14 @@ export default function ForgotPasswordPage() {
       // Always show same message to prevent email enumeration
       toast.success('If that email exists, we\'ve sent a password reset link.')
     } catch (err) {
-      // Always show same message even on error to prevent enumeration
-      toast.success('If that email exists, we\'ve sent a password reset link.')
+      // Check if this is an SSO-related error
+      const errorMessage = err.response?.data?.detail || err.message
+      if (errorMessage && (errorMessage.includes('SSO') || errorMessage.includes('Single Sign-On'))) {
+        toast.error('Password reset is disabled. Your organization uses Single Sign-On (SSO). Please contact your administrator.')
+      } else {
+        // Always show same message even on error to prevent enumeration
+        toast.success('If that email exists, we\'ve sent a password reset link.')
+      }
       console.error('Forgot password error:', err)
     } finally {
       setLoading(false)

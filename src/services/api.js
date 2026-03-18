@@ -159,12 +159,14 @@ api.interceptors.response.use(
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
+  ldapLogin: (username, password) => api.post('/auth/ldap/login', { username, password }),
   logout: () => api.post('/auth/logout', {}),
   refresh: (refreshToken) => api.post('/auth/refresh',
     refreshToken ? { refresh_token: refreshToken } : {},
     { withCredentials: true }
   ),
   me: () => api.get('/auth/me'),
+  getProviders: () => api.get('/auth/providers'),
   updateProfile: (data) => api.put('/auth/me', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, new_password) => api.post('/auth/reset-password', { token, new_password }),

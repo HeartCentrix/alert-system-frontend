@@ -179,7 +179,13 @@ function UserModal({ user, onClose, onSaved }) {
       console.log('Cleaned data:', cleanedData)
 
       if (user?.id) {
-        await handleUpdate(data, cleanedData)
+        await usersAPI.update(user.id, cleanedData)
+        // Invalidate users list and filter options to reflect changes
+        await queryClient.invalidateQueries({ queryKey: ['users'], refetchType: 'all' })
+        await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+        toast.success('User updated')
+        onSaved()
+        onClose()
       } else {
         await handleCreate(data, cleanedData)
       }

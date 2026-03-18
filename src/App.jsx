@@ -15,6 +15,7 @@ import { GroupsPage, LocationsPage, TemplatesPage, IncidentsPage } from '@/pages
 import LocationMembersPage from '@/pages/LocationMembersPage'
 import IncomingPage from '@/pages/IncomingPage'
 import SettingsPage from '@/pages/SettingsPage'
+import AuthCallbackPage from '@/pages/AuthCallbackPage'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
 import TermsAndConditions from '@/pages/TermsAndConditions'
 
@@ -137,6 +138,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         {/* Public routes for safety response (from email/SMS links) */}

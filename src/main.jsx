@@ -24,7 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       </ErrorBoundary>
       <Toaster
         position="top-right"
-        containerStyle={{ zIndex: 99999 }}
+        containerStyle={{ zIndex: 100000 }}
         toastOptions={{
           style: {
             background: '#1e293b',
@@ -32,6 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             border: '1px solid #334155',
             borderRadius: '10px',
             fontSize: '13px',
+            zIndex: 100000,
           },
           success: { iconTheme: { primary: '#22c55e', secondary: '#1e293b' } },
           error:   { iconTheme: { primary: '#ef4444', secondary: '#1e293b' } },
