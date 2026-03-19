@@ -1,62 +1,49 @@
 import { create } from 'zustand'
 import { authAPI, usersAPI } from '@/services/api'
 
-// ─── 2026 INDUSTRY STANDARD: Secure Session Management ──────────────────────
-// Using sessionStorage with explicit cleanup on tab close
-// Reference: OWASP 2026, NIST SP 800-63B, Google Cloud Security Best Practices
-
-const SESSION_KEYS = {
-  ACCESS_TOKEN: 'tm_access_token',
-  REFRESH_TOKEN: 'tm_refresh_token',
-  SESSION_ID: 'tm_session_id',
-  TOKEN_EXPIRY: 'tm_token_expiry',
-}
-
-// Generate unique session ID for this tab
-const generateSessionId = () => {
-  return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
-}
-
-// Get or create session ID for this tab
-const getSessionId = () => {
-  let sessionId = sessionStorage.getItem(SESSION_KEYS.SESSION_ID)
-  if (!sessionId) {
-    sessionId = generateSessionId()
-    sessionStorage.setItem(SESSION_KEYS.SESSION_ID, sessionId)
-  }
-  return sessionId
-}
-
+// Simple session storage (no prefixes, no complex tracking)
 const saveRefreshToken = (token) => {
   if (token) {
-    sessionStorage.setItem(SESSION_KEYS.REFRESH_TOKEN, token)
+    sessionStorage.setItem('refresh_token', token)
   }
 }
 
 const getRefreshToken = () => {
-  return sessionStorage.getItem(SESSION_KEYS.REFRESH_TOKEN)
+  return sessionStorage.getItem('refresh_token')
 }
 
 const clearRefreshToken = () => {
-  sessionStorage.removeItem(SESSION_KEYS.REFRESH_TOKEN)
+  sessionStorage.removeItem('refresh_token')
 }
 
 const saveAccessToken = (token, expiresIn = 3600) => {
   if (token) {
-    sessionStorage.setItem(SESSION_KEYS.ACCESS_TOKEN, token)
-    // Store token expiry timestamp (current time + expiry in seconds)
+    sessionStorage.setItem('access_token', token)
+    // Store expiry timestamp for token refresh
     const expiryTime = Date.now() + (expiresIn * 1000)
-    sessionStorage.setItem(SESSION_KEYS.TOKEN_EXPIRY, expiryTime.toString())
+    sessionStorage.setItem('access_token_expiry', expiryTime.toString())
   }
 }
 
 const getAccessToken = () => {
-  return sessionStorage.getItem(SESSION_KEYS.ACCESS_TOKEN)
+  return sessionStorage.getItem('access_token')
+}
+
+const clearAccessToken = () => {
+  sessionStorage.removeItem('access_token')
+  sessionStorage.removeItem('access_token_expiry')
+}
+
+// Clear all session data
+const clearAllSessionData = () => {
+  clearAccessToken()
+  clearRefreshToken()
+  sessionStorage.removeItem('user')
 }
 
 // Check if access token is expired
 const isAccessTokenExpired = () => {
-  const expiry = sessionStorage.getItem(SESSION_KEYS.TOKEN_EXPIRY)
+  const expiry = sessionStorage.getItem('access_token_expiry')
   if (!expiry) return true
   
   const expiryTime = parseInt(expiry, 10)
@@ -66,38 +53,24 @@ const isAccessTokenExpired = () => {
   return now >= (expiryTime - 30000)
 }
 
-const clearAccessToken = () => {
-  sessionStorage.removeItem(SESSION_KEYS.ACCESS_TOKEN)
-  sessionStorage.removeItem(SESSION_KEYS.TOKEN_EXPIRY)
-}
-
-// Clear ALL session data (2026 standard: complete cleanup)
-const clearAllSessionData = () => {
-  Object.values(SESSION_KEYS).forEach(key => {
-    sessionStorage.removeItem(key)
-  })
-}
-
-// 2026 STANDARD: Explicit cleanup on tab close
-// This ensures tokens are cleared even if browser restores session
-const registerBeforeUnloadHandler = () => {
-  const handleBeforeUnload = () => {
-    // Clear tokens on tab close (prevents session restoration attacks)
-    clearAllSessionData()
-  }
-
-  window.addEventListener('beforeunload', handleBeforeUnload)
-
-  // Return cleanup function
-  return () => {
-    window.removeEventListener('beforeunload', handleBeforeUnload)
-  }
-}
-
 // Helper: Initialize authentication with token refresh logic
-async function initializeAuth() {
+async function initializeAuth(set) {
   const persistedToken = getAccessToken()
-  
+  const isExpired = isAccessTokenExpired()
+
+  // Check if token exists AND is not expired
+  if (!persistedToken || isExpired) {
+    // No token or token expired - clear session and require login
+    clearAllSessionData()
+    return {
+      accessToken: null,
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isInitializing: false
+    }
+  }
+
   try {
     // Try to fetch user with current token
     const { data } = await authAPI.me()
@@ -106,13 +79,12 @@ async function initializeAuth() {
       user: data,
       isAuthenticated: true,
       isLoading: false,
-      isInitializing: false,
-      sessionId: getSessionId()
+      isInitializing: false
     }
   } catch (error) {
     // Handle 401/403 with token refresh
     if (error?.response?.status === 401 || error?.response?.status === 403) {
-      const refreshResult = await handleTokenRefresh()
+      const refreshResult = await handleTokenRefresh(set)
       if (refreshResult) {
         return refreshResult
       }
@@ -124,20 +96,28 @@ async function initializeAuth() {
 }
 
 // Helper: Handle token refresh flow
-async function handleTokenRefresh() {
+async function handleTokenRefresh(set) {
   try {
     const refreshTokenFromStorage = getRefreshToken()
+
     const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
 
     if (refreshData?.access_token) {
-      // Save new tokens
+      // Save new tokens to sessionStorage
       if (refreshData.refresh_token) {
         saveRefreshToken(refreshData.refresh_token)
       }
       const expiresIn = refreshData.expires_in || 3600
       saveAccessToken(refreshData.access_token, expiresIn)
 
-      // Fetch user data with new token
+      // IMPORTANT: Update Zustand store BEFORE calling /auth/me
+      // This ensures the request interceptor uses the NEW token
+      set({
+        accessToken: refreshData.access_token,
+        refreshToken: refreshData.refresh_token || refreshTokenFromStorage
+      })
+
+      // Fetch user data with NEW token
       const { data: userData } = await authAPI.me()
 
       return {
@@ -146,8 +126,7 @@ async function handleTokenRefresh() {
         user: userData,
         isAuthenticated: true,
         isLoading: false,
-        isInitializing: false,
-        sessionId: getSessionId()
+        isInitializing: false
       }
     }
   } catch (refreshError) {
@@ -163,7 +142,6 @@ const useAuthStore = create((set, get) => ({
   isLoading: true,
   accessToken: null,
   refreshToken: null,
-  sessionId: null,
   isInitializing: false,      // Prevent duplicate init calls
   // MFA state
   mfaState: null,
@@ -172,23 +150,15 @@ const useAuthStore = create((set, get) => ({
   mfaSecret: null,
   // Heartbeat interval ID
   heartbeatIntervalId: null,
-  // Session cleanup handler
-  cleanupHandler: null,
 
   init: async () => {
     // Prevent duplicate initialization
     if (get().isInitializing) return
     set({ isInitializing: true })
 
-    // 2026 STANDARD: Register beforeunload handler for tab close cleanup
-    if (!get().cleanupHandler) {
-      const cleanupHandler = registerBeforeUnloadHandler()
-      set({ cleanupHandler })
-    }
-
     try {
       // Initialize authentication (handles token validation and refresh)
-      const authResult = await initializeAuth()
+      const authResult = await initializeAuth(set)
       set(authResult)
 
       // Start heartbeat if user is authenticated
@@ -205,7 +175,6 @@ const useAuthStore = create((set, get) => ({
         isInitializing: false,
         accessToken: null,
         refreshToken: null,
-        sessionId: null,
         mfaState: null
       })
     }
@@ -225,7 +194,6 @@ const useAuthStore = create((set, get) => ({
     const intervalId = setInterval(() => {
       usersAPI.heartbeat().catch(() => {
         // If heartbeat fails (e.g., 401), stop the interval
-        console.warn('Heartbeat failed, stopping interval')
         get().stopHeartbeat()
       })
     }, 30000) // 30 seconds
@@ -272,7 +240,7 @@ const useAuthStore = create((set, get) => ({
 
     if (!data?.access_token) throw new Error('No token received from server')
 
-    // 2026 STANDARD: Save tokens with expiry time
+    // 2026 STANDARD: Save tokens with expiry time from backend
     const expiresIn = data.expires_in || 3600 // Default 1 hour
     saveAccessToken(data.access_token, expiresIn)
     saveRefreshToken(data.refresh_token)
@@ -282,7 +250,6 @@ const useAuthStore = create((set, get) => ({
       user: data.user,
       isAuthenticated: true,
       isLoading: false,
-      sessionId: getSessionId(),
       mfaState: null,
       mfaChallengeToken: null,
       mfaQRCodeURI: null,
@@ -402,21 +369,20 @@ const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try { 
-      // 2026 STANDARD: Notify backend to invalidate session
+      // Notify backend to invalidate session
       await authAPI.logout() 
     } catch {}
     
-    // 2026 STANDARD: Stop heartbeat first
+    // Stop heartbeat first
     get().stopHeartbeat()
     
-    // 2026 STANDARD: Clear ALL session data (not just tokens)
+    // Clear ALL session data
     clearAllSessionData()
     
-    // 2026 STANDARD: Clear store state
+    // Clear store state
     set({
       accessToken: null,
       refreshToken: null,
-      sessionId: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
@@ -424,27 +390,19 @@ const useAuthStore = create((set, get) => ({
       mfaQRCodeURI: null,
       mfaSecret: null,
     })
-    
-    // 2026 STANDARD: Remove beforeunload handler
-    const { cleanupHandler } = get()
-    if (cleanupHandler) {
-      cleanupHandler()
-      set({ cleanupHandler: null })
-    }
   },
 
   clearSession: () => {
-    // 2026 STANDARD: Stop heartbeat first
+    // Stop heartbeat first
     get().stopHeartbeat()
     
-    // 2026 STANDARD: Clear ALL session data
+    // Clear ALL session data
     clearAllSessionData()
     
-    // 2026 STANDARD: Clear store state
+    // Clear store state
     set({
       accessToken: null,
       refreshToken: null,
-      sessionId: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
@@ -452,13 +410,6 @@ const useAuthStore = create((set, get) => ({
       mfaQRCodeURI: null,
       mfaSecret: null,
     })
-    
-    // 2026 STANDARD: Remove beforeunload handler
-    const { cleanupHandler } = get()
-    if (cleanupHandler) {
-      cleanupHandler()
-      set({ cleanupHandler: null })
-    }
   },
 
   updateUser: (updatedUser) => {
