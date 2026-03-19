@@ -1,62 +1,49 @@
 import { create } from 'zustand'
 import { authAPI, usersAPI } from '@/services/api'
 
-// ─── 2026 INDUSTRY STANDARD: Secure Session Management ──────────────────────
-// Using sessionStorage with explicit cleanup on tab close
-// Reference: OWASP 2026, NIST SP 800-63B, Google Cloud Security Best Practices
-
-const SESSION_KEYS = {
-  ACCESS_TOKEN: 'tm_access_token',
-  REFRESH_TOKEN: 'tm_refresh_token',
-  SESSION_ID: 'tm_session_id',
-  TOKEN_EXPIRY: 'tm_token_expiry',
-}
-
-// Generate unique session ID for this tab
-const generateSessionId = () => {
-  return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
-}
-
-// Get or create session ID for this tab
-const getSessionId = () => {
-  let sessionId = sessionStorage.getItem(SESSION_KEYS.SESSION_ID)
-  if (!sessionId) {
-    sessionId = generateSessionId()
-    sessionStorage.setItem(SESSION_KEYS.SESSION_ID, sessionId)
-  }
-  return sessionId
-}
-
+// Simple session storage (no prefixes, no complex tracking)
 const saveRefreshToken = (token) => {
   if (token) {
-    sessionStorage.setItem(SESSION_KEYS.REFRESH_TOKEN, token)
+    sessionStorage.setItem('refresh_token', token)
   }
 }
 
 const getRefreshToken = () => {
-  return sessionStorage.getItem(SESSION_KEYS.REFRESH_TOKEN)
+  return sessionStorage.getItem('refresh_token')
 }
 
 const clearRefreshToken = () => {
-  sessionStorage.removeItem(SESSION_KEYS.REFRESH_TOKEN)
+  sessionStorage.removeItem('refresh_token')
 }
 
 const saveAccessToken = (token, expiresIn = 3600) => {
   if (token) {
-    sessionStorage.setItem(SESSION_KEYS.ACCESS_TOKEN, token)
-    // Store token expiry timestamp (current time + expiry in seconds)
+    sessionStorage.setItem('access_token', token)
+    // Store expiry timestamp for token refresh
     const expiryTime = Date.now() + (expiresIn * 1000)
-    sessionStorage.setItem(SESSION_KEYS.TOKEN_EXPIRY, expiryTime.toString())
+    sessionStorage.setItem('access_token_expiry', expiryTime.toString())
   }
 }
 
 const getAccessToken = () => {
-  return sessionStorage.getItem(SESSION_KEYS.ACCESS_TOKEN)
+  return sessionStorage.getItem('access_token')
+}
+
+const clearAccessToken = () => {
+  sessionStorage.removeItem('access_token')
+  sessionStorage.removeItem('access_token_expiry')
+}
+
+// Clear all session data
+const clearAllSessionData = () => {
+  clearAccessToken()
+  clearRefreshToken()
+  sessionStorage.removeItem('user')
 }
 
 // Check if access token is expired
 const isAccessTokenExpired = () => {
-  const expiry = sessionStorage.getItem(SESSION_KEYS.TOKEN_EXPIRY)
+  const expiry = sessionStorage.getItem('access_token_expiry')
   if (!expiry) return true
   
   const expiryTime = parseInt(expiry, 10)
@@ -65,24 +52,6 @@ const isAccessTokenExpired = () => {
   // Consider token expired if within 30 seconds of expiry (buffer time)
   return now >= (expiryTime - 30000)
 }
-
-const clearAccessToken = () => {
-  sessionStorage.removeItem(SESSION_KEYS.ACCESS_TOKEN)
-  sessionStorage.removeItem(SESSION_KEYS.TOKEN_EXPIRY)
-}
-
-// Clear ALL session data (2026 standard: complete cleanup)
-const clearAllSessionData = () => {
-  Object.values(SESSION_KEYS).forEach(key => {
-    sessionStorage.removeItem(key)
-  })
-}
-
-// NOTE: No beforeunload handler needed
-// sessionStorage automatically:
-// - Persists on page refresh (what we want)
-// - Clears when all tabs are closed (browser behavior)
-// This is more reliable than custom handlers
 
 // Helper: Initialize authentication with token refresh logic
 async function initializeAuth() {
@@ -105,8 +74,7 @@ async function initializeAuth() {
       user: null,
       isAuthenticated: false,
       isLoading: false,
-      isInitializing: false,
-      sessionId: null
+      isInitializing: false
     }
   }
 
@@ -120,8 +88,7 @@ async function initializeAuth() {
       user: data,
       isAuthenticated: true,
       isLoading: false,
-      isInitializing: false,
-      sessionId: getSessionId()
+      isInitializing: false
     }
   } catch (error) {
     console.log('[AuthStore] /auth/me failed with status:', error.response?.status)
@@ -182,8 +149,7 @@ async function handleTokenRefresh() {
         user: userData,
         isAuthenticated: true,
         isLoading: false,
-        isInitializing: false,
-        sessionId: getSessionId()
+        isInitializing: false
       }
     }
   } catch (refreshError) {
@@ -200,7 +166,6 @@ const useAuthStore = create((set, get) => ({
   isLoading: true,
   accessToken: null,
   refreshToken: null,
-  sessionId: null,
   isInitializing: false,      // Prevent duplicate init calls
   // MFA state
   mfaState: null,
@@ -237,7 +202,6 @@ const useAuthStore = create((set, get) => ({
         isInitializing: false,
         accessToken: null,
         refreshToken: null,
-        sessionId: null,
         mfaState: null
       })
     }
@@ -304,7 +268,7 @@ const useAuthStore = create((set, get) => ({
 
     if (!data?.access_token) throw new Error('No token received from server')
 
-    // 2026 STANDARD: Save tokens with expiry time
+    // 2026 STANDARD: Save tokens with expiry time from backend
     const expiresIn = data.expires_in || 3600 // Default 1 hour
     saveAccessToken(data.access_token, expiresIn)
     saveRefreshToken(data.refresh_token)
@@ -314,7 +278,6 @@ const useAuthStore = create((set, get) => ({
       user: data.user,
       isAuthenticated: true,
       isLoading: false,
-      sessionId: getSessionId(),
       mfaState: null,
       mfaChallengeToken: null,
       mfaQRCodeURI: null,
@@ -448,7 +411,6 @@ const useAuthStore = create((set, get) => ({
     set({
       accessToken: null,
       refreshToken: null,
-      sessionId: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
@@ -469,7 +431,6 @@ const useAuthStore = create((set, get) => ({
     set({
       accessToken: null,
       refreshToken: null,
-      sessionId: null,
       user: null,
       isAuthenticated: false,
       mfaState: null,
