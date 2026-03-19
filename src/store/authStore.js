@@ -54,7 +54,7 @@ const isAccessTokenExpired = () => {
 }
 
 // Helper: Initialize authentication with token refresh logic
-async function initializeAuth() {
+async function initializeAuth(set) {
   const persistedToken = getAccessToken()
   const isExpired = isAccessTokenExpired()
   
@@ -181,7 +181,7 @@ const useAuthStore = create((set, get) => ({
 
     try {
       // Initialize authentication (handles token validation and refresh)
-      const authResult = await initializeAuth()
+      const authResult = await initializeAuth(set)
       set(authResult)
 
       // Start heartbeat if user is authenticated
