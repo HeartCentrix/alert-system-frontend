@@ -133,15 +133,14 @@ function tryParseValidationError(data) {
   return null
 }
 
+// Parse errors array format
+function tryParseErrorsArray(data) {
   if (Array.isArray(data?.errors)) {
     const messages = data.errors.map(normalizeErrorItem).filter(Boolean)
     if (messages.length > 0) {
       return { title: 'Validation Error', messages }
     }
   }
-  return null
-}
-
   return null
 }
 
@@ -165,9 +164,6 @@ function extractFromErrorField(data) {
   if (data?.error && typeof data.error === 'string') {
     return { messages: [data.error] }
   }
-  return null
-}
-
   return null
 }
 
@@ -214,9 +210,6 @@ function getNetworkErrorMessage(error) {
       messages: ['No response from server. Please check your internet connection.'],
     }
   }
-  return null
-}
-
   return null
 }
 
