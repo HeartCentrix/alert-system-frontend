@@ -95,7 +95,7 @@ async function initializeAuth() {
     // Handle 401/403 with token refresh
     if (error?.response?.status === 401 || error?.response?.status === 403) {
       console.log('[AuthStore] Calling handleTokenRefresh...')
-      const refreshResult = await handleTokenRefresh()
+      const refreshResult = await handleTokenRefresh(set)
       if (refreshResult) {
         console.log('[AuthStore] Refresh successful, returning result')
         return refreshResult
@@ -110,11 +110,11 @@ async function initializeAuth() {
 }
 
 // Helper: Handle token refresh flow
-async function handleTokenRefresh() {
+async function handleTokenRefresh(set) {
   try {
     const refreshTokenFromStorage = getRefreshToken()
     console.log('[AuthStore] Refreshing token with:', refreshTokenFromStorage ? 'refresh token present' : 'NO REFRESH TOKEN')
-    
+
     const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
 
     console.log('[AuthStore] Refresh successful, got access_token:', !!refreshData.access_token)
@@ -131,8 +131,7 @@ async function handleTokenRefresh() {
 
       // IMPORTANT: Update Zustand store BEFORE calling /auth/me
       // This ensures the request interceptor uses the NEW token
-      // Note: We're inside authStore.js, so we can use set/get directly
-      set({ 
+      set({
         accessToken: refreshData.access_token,
         refreshToken: refreshData.refresh_token || refreshTokenFromStorage
       })
