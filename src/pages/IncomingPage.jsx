@@ -11,6 +11,7 @@ export default function IncomingPage() {
     queryKey: ['incoming-messages'],
     queryFn: () => api.get('/webhooks/incoming-messages?limit=100').then(r => r.data),
     refetchInterval: isVisible ? 10_000 : false,
+    refetchOnWindowFocus: true,
   })
 
   const grouped = messages.reduce((acc, m) => {
