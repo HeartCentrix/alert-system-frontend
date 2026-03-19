@@ -171,31 +171,67 @@ function UserModal({ user, onClose, onSaved }) {
     refetchOnWindowFocus: 'always',
   })
 
-  // Reset form when user prop changes (prevents stale values on re-mount)
-  useEffect(() => {
-    reset(user || { role: 'viewer', preferred_channels: ['sms', 'email'] })
-    setGeneratedPassword(null)
-    setShowPassword(false)
-  }, [user, reset])
+  // Fetch latest user data when editing (ensures fresh data in modal)
+  const { data: latestUserData, isLoading: loadingUser } = useQuery({
+    queryKey: ['user', user?.id],
+    queryFn: () => usersAPI.get(user.id).then(r => r.data),
+    enabled: !!user?.id, // Only fetch when editing existing user
+    staleTime: 0, // Always consider data stale
+    refetchOnWindowFocus: 'always', // Always refetch when modal gains focus
+  })
 
   // Fetch locations for the dropdown
-  const { data: locationsData, error: locationsError } = useQuery({
+  const { data: locationsData, error: locationsError, isLoading: loadingLocations } = useQuery({
     queryKey: ['locations'],
     queryFn: async () => {
       const { locationsAPI } = await import('@/services/api')
       const response = await locationsAPI.list()
       return response.data || []
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // Always consider data stale for fresh data
     retry: 1,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: 'always', // Always refetch when modal opens
   })
+
   const locations = locationsData || []
-  
+
+  // Reset form when data is loaded (for existing users, wait for fresh data)
+  useEffect(() => {
+    if (!user?.id) {
+      // New user - reset with default values immediately
+      reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+      setGeneratedPassword(null)
+      setShowPassword(false)
+    } else if (latestUserData && !loadingLocations) {
+      // Existing user - reset with fresh data once loaded
+      reset(latestUserData)
+      setGeneratedPassword(null)
+      setShowPassword(false)
+    }
+  }, [user, latestUserData, loadingLocations, reset])
+
   // Handle locations fetch error gracefully
   if (locationsError && !locationsError.isFetching) {
     console.error('Failed to load locations:', locationsError)
     // Don't crash the component - just continue with empty locations list
+  }
+
+  // Show loading state while fetching data for existing user
+  if (user?.id && (loadingUser || loadingLocations)) {
+    return (
+      <ModalPortal>
+        <div className="modal-overlay">
+          <div className="card w-full max-w-lg animate-fade-in">
+            <div className="p-8 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-slate-400 text-sm">Loading user data...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+    )
   }
 
   const handleUpdate = async (data, cleanedData) => {
@@ -685,6 +721,7 @@ export default function PeoplePage() {
     queryFn: () => usersAPI.list({ page, page_size: 20, search: search || undefined }).then(r => r.data),
     refetchInterval: isVisible ? 10000 : false, // Refresh every 10s when visible for real-time status
     refetchIntervalInBackground: true, // Also refresh when tab is in background
+    refetchOnWindowFocus: true,
   })
 
   const deleteMutation = useMutation({

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { MessageSquare, Phone, RefreshCw } from 'lucide-react'
+import { MessageSquare, Phone, RefreshCw, Download } from 'lucide-react'
 import api from '@/services/api'
 import { timeAgo, channelIcon, channelLabel, cn } from '@/utils/helpers'
 import { useIsDocumentVisible } from '@/hooks/useVisibility'
@@ -11,7 +11,39 @@ export default function IncomingPage() {
     queryKey: ['incoming-messages'],
     queryFn: () => api.get('/webhooks/incoming-messages?limit=100').then(r => r.data),
     refetchInterval: isVisible ? 10_000 : false,
+    refetchOnWindowFocus: true,
   })
+
+  const handleExportCSV = () => {
+    if (!messages || messages.length === 0) return
+
+    const headers = ['ID', 'Notification ID', 'From Number', 'User Name', 'Channel', 'Body', 'Received At', 'Processed']
+    const rows = messages.map(msg => [
+      msg.id,
+      msg.notification_id || '',
+      msg.from_number || '',
+      msg.user_name || '',
+      msg.channel || '',
+      `"${(msg.body || '').replace(/"/g, '""')}"`,
+      msg.received_at || '',
+      msg.is_processed ? 'Yes' : 'No'
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `incoming-messages-${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   const grouped = messages.reduce((acc, m) => {
     const key = m.notification_id ? `notif-${m.notification_id}` : 'unlinked'
@@ -27,14 +59,25 @@ export default function IncomingPage() {
           <h1 className="font-display font-bold text-2xl text-white">Incoming Messages</h1>
           <p className="text-slate-500 text-sm">Employee SMS replies and safety check-ins</p>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="btn-ghost"
-        >
-          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            disabled={!messages || messages.length === 0}
+            className="btn-ghost"
+            title="Export messages to CSV"
+          >
+            <Download size={14} />
+            Export CSV
+          </button>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="btn-ghost"
+          >
+            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {isLoading && (

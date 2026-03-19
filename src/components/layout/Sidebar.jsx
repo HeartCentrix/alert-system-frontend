@@ -13,7 +13,10 @@ import useAuthStore from '@/store/authStore'
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
   { label: 'COMMUNICATION', header: true },
-  { label: 'Incoming Messages', icon: Inbox, to: '/incoming' },
+  {
+    label: 'Incoming Messages', icon: Inbox, to: '/incoming',
+    customActive: (pathname, search) => pathname === '/incoming',
+  },
   {
     label: 'Notifications', icon: Bell, to: '/notifications',
     customActive: (pathname, search) =>
