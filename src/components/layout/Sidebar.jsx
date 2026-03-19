@@ -57,9 +57,9 @@ function NavItem({ item, sidebarOpen, location }) {
   return (
     <NavLink
       to={item.to}
-      className={({ isActive: linkIsActive }) => cn(
+      className={() => cn(
         'nav-item',
-        (isActive || linkIsActive) && 'active',
+        isActive && 'active',
         !sidebarOpen && 'justify-center'
       )}
     >
