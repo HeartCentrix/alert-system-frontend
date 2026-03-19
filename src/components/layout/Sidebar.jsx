@@ -70,12 +70,16 @@ function NavItem({ item, sidebarOpen, location }) {
 }
 
 // User profile section for expanded sidebar
-function UserProfileExpanded({ user, onLogout }) {
+function UserProfileExpanded({ user, onLogout, onNavigateSettings }) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors">
+          <button
+            onClick={onNavigateSettings}
+            className="w-full flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 transition-colors text-left"
+            aria-label="Open account settings"
+          >
             <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
               {getInitials(user?.full_name || user?.email || 'U')}
             </div>
@@ -84,19 +88,24 @@ function UserProfileExpanded({ user, onLogout }) {
               <div className="text-xs text-slate-500 truncate">{user?.role?.replaceAll('_', ' ')}</div>
             </div>
             <button
-              onClick={onLogout}
-              className="text-slate-500 hover:text-danger-400 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                onLogout()
+              }}
+              className="text-slate-500 hover:text-danger-400 hover:bg-danger-900/20 p-1.5 rounded-lg transition-colors"
               title="Logout"
               aria-label="Logout"
+              type="button"
             >
               <LogOut size={15} />
             </button>
-          </div>
+          </button>
         </TooltipTrigger>
         <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
           <div className="text-center">
             <div className="font-medium">{user?.full_name}</div>
             <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
+            <div className="text-xs text-slate-500 mt-1">Click to view profile</div>
           </div>
         </TooltipContent>
       </Tooltip>
@@ -123,7 +132,7 @@ function UserProfileCollapsed({ user, onLogout }) {
           <div className="text-center">
             <div className="font-medium">{user?.full_name}</div>
             <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
-            <div className="text-xs text-danger-400 mt-1">Click to logout</div>
+            <div className="text-xs text-slate-500 mt-1">Click to logout</div>
           </div>
         </TooltipContent>
       </Tooltip>
@@ -261,7 +270,11 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) 
       {/* User profile - sticks to bottom */}
       <div className="mt-auto p-3 border-t border-surface-700/60">
         {sidebarOpen ? (
-          <UserProfileExpanded user={user} onLogout={handleLogout} />
+          <UserProfileExpanded 
+            user={user} 
+            onLogout={handleLogout}
+            onNavigateSettings={() => navigate('/settings')}
+          />
         ) : (
           <UserProfileCollapsed user={user} onLogout={handleLogout} />
         )}

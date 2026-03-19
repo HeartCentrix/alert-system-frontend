@@ -60,19 +60,19 @@ export default function DashboardPage() {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => dashboardAPI.stats().then(r => r.data),
-    refetchInterval: isVisible ? 30000 : false,
+    refetchInterval: isVisible ? 10000 : false, // Refresh every 10s for real-time online status
   })
 
   const { data: mapData } = useQuery({
     queryKey: ['map-data'],
     queryFn: () => dashboardAPI.mapData().then(r => r.data),
-    refetchInterval: isVisible ? 30000 : false,
+    refetchInterval: isVisible ? 30000 : false, // Map data changes less frequently
   })
 
   const { data: activity } = useQuery({
     queryKey: ['activity'],
     queryFn: () => dashboardAPI.activity(7).then(r => r.data),
-    refetchInterval: isVisible ? 60000 : false,
+    refetchInterval: isVisible ? 60000 : false, // Activity stats change slowly
   })
 
   const chartData = activity?.map(d => ({

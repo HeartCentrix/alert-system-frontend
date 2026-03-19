@@ -101,30 +101,60 @@ export function normalizeApiError(error) {
   if (typeof error === 'string') return { messages: [error || 'An error occurred'] }
 
   const data = error?.response?.data || error?.detail || error
+  
+  // Handle string responses
   if (typeof data === 'string') return { messages: [data] }
   if (data?.detail && typeof data.detail === 'string') return { messages: [data.detail] }
 
-  // Handle validation errors (Pydantic/FastAPI)
+  // Try each error format handler
+  const validationError = tryParseValidationError(data)
+  if (validationError) return validationError
+
+  const messageError = tryParseMessageError(data)
+  if (messageError) return messageError
+
+  const networkError = getNetworkErrorMessage(error)
+  if (networkError) return networkError
+
+  const fallbackError = tryParseFallbackError(data)
+  if (fallbackError) return fallbackError
+
+  return defaultResponse
+}
+
+// Parse Pydantic/FastAPI validation errors
+function tryParseValidationError(data) {
   if (Array.isArray(data?.detail)) {
     const messages = data.detail.map(normalizePydanticError).filter(Boolean)
-    if (messages.length > 0) return { title: 'Validation Error', messages }
+    if (messages.length > 0) {
+      return { title: 'Validation Error', messages }
+    }
   }
   return null
 }
 
-  // Handle { errors: [...] } format
   if (Array.isArray(data?.errors)) {
     const messages = data.errors.map(normalizeErrorItem).filter(Boolean)
-    if (messages.length > 0) return { title: 'Validation Error', messages }
+    if (messages.length > 0) {
+      return { title: 'Validation Error', messages }
+    }
   }
   return null
 }
 
+  return null
+}
+
+// Parse { message: ... } or { error: ... } formats
+function tryParseMessageError(data) {
+  if (!data) return null
+
   // Handle { message: "..." } format
-  if (data?.message) {
+  if (data.message) {
     const msg = data.message
     if (Array.isArray(msg)) {
-      return { messages: msg.filter(m => m && typeof m === 'string') }
+      const filtered = msg.filter(m => m && typeof m === 'string')
+      if (filtered.length > 0) return { messages: filtered }
     }
     if (typeof msg === 'string') return { messages: [msg] }
   }
@@ -138,20 +168,20 @@ function extractFromErrorField(data) {
   return null
 }
 
-  // Handle network errors
-  const networkError = getNetworkErrorMessage(error)
-  if (networkError) return networkError
+  return null
+}
 
-  // Fallback: extract any string property
-  if (data && typeof data === 'object') {
-    for (const key of ['detail', 'message', 'error', 'errorMessage', 'errorMsg']) {
-      if (data[key] && typeof data[key] === 'string') {
-        return { messages: [data[key]] }
-      }
+// Fallback: extract any string property from object
+function tryParseFallbackError(data) {
+  if (!data || typeof data !== 'object') return null
+
+  for (const key of ['detail', 'message', 'error', 'errorMessage', 'errorMsg']) {
+    if (data[key] && typeof data[key] === 'string') {
+      return { messages: [data[key]] }
     }
   }
 
-  return defaultResponse
+  return null
 }
 
 // Normalize individual error item from errors array
