@@ -87,9 +87,17 @@ const clearAllSessionData = () => {
 // Helper: Initialize authentication with token refresh logic
 async function initializeAuth() {
   const persistedToken = getAccessToken()
+  const isExpired = isAccessTokenExpired()
+  
+  console.log('[AuthStore] Initializing auth...', {
+    hasToken: !!persistedToken,
+    isExpired,
+    token: persistedToken ? persistedToken.substring(0, 50) + '...' : 'none'
+  })
 
   // 2026 STANDARD: Check if token exists AND is not expired
-  if (!persistedToken || isAccessTokenExpired()) {
+  if (!persistedToken || isExpired) {
+    console.log('[AuthStore] No token or expired - clearing session')
     // No token or token expired - clear session and require login
     clearAllSessionData()
     return {
@@ -104,7 +112,9 @@ async function initializeAuth() {
 
   try {
     // Try to fetch user with current token
+    console.log('[AuthStore] Calling /auth/me with persisted token...')
     const { data } = await authAPI.me()
+    console.log('[AuthStore] /auth/me successful, user:', data.email)
     return {
       accessToken: persistedToken,
       user: data,
@@ -114,14 +124,19 @@ async function initializeAuth() {
       sessionId: getSessionId()
     }
   } catch (error) {
+    console.log('[AuthStore] /auth/me failed with status:', error.response?.status)
     // Handle 401/403 with token refresh
     if (error?.response?.status === 401 || error?.response?.status === 403) {
+      console.log('[AuthStore] Calling handleTokenRefresh...')
       const refreshResult = await handleTokenRefresh()
       if (refreshResult) {
+        console.log('[AuthStore] Refresh successful, returning result')
         return refreshResult
       }
+      console.log('[AuthStore] Refresh returned null')
     }
     // Auth failed and refresh didn't work - clear session
+    console.log('[AuthStore] Clearing session due to auth failure')
     clearAllSessionData()
     throw error
   }
@@ -131,15 +146,21 @@ async function initializeAuth() {
 async function handleTokenRefresh() {
   try {
     const refreshTokenFromStorage = getRefreshToken()
+    console.log('[AuthStore] Refreshing token with:', refreshTokenFromStorage ? 'refresh token present' : 'NO REFRESH TOKEN')
+    
     const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
+
+    console.log('[AuthStore] Refresh successful, got access_token:', !!refreshData.access_token)
 
     if (refreshData?.access_token) {
       // Save new tokens to sessionStorage
       if (refreshData.refresh_token) {
         saveRefreshToken(refreshData.refresh_token)
+        console.log('[AuthStore] Saved refresh token to sessionStorage')
       }
       const expiresIn = refreshData.expires_in || 3600
       saveAccessToken(refreshData.access_token, expiresIn)
+      console.log('[AuthStore] Saved access token to sessionStorage with expiry:', expiresIn)
 
       // IMPORTANT: Update Zustand store BEFORE calling /auth/me
       // This ensures the request interceptor uses the NEW token
@@ -147,11 +168,13 @@ async function handleTokenRefresh() {
       if (authStore) {
         authStore.setAccessToken?.(refreshData.access_token)
         authStore.setRefreshToken?.(refreshData.refresh_token || refreshTokenFromStorage)
+        console.log('[AuthStore] Updated Zustand store with new tokens')
       }
 
       // Fetch user data with NEW token
-      // Backend may or may not return user in refresh response, so we call /auth/me
+      console.log('[AuthStore] Calling /auth/me with new token...')
       const { data: userData } = await authAPI.me()
+      console.log('[AuthStore] /auth/me successful, user:', userData.email)
 
       return {
         accessToken: refreshData.access_token,
@@ -164,6 +187,7 @@ async function handleTokenRefresh() {
       }
     }
   } catch (refreshError) {
+    console.error('[AuthStore] Refresh failed:', refreshError.message)
     // Refresh failed - clear session
     clearAllSessionData()
   }
