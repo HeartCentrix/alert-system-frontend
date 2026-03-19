@@ -408,6 +408,7 @@ export default function LocationMembersPage() {
     },
     enabled: !!locationId,
     refetchInterval: isVisible ? 30000 : false,
+    refetchOnWindowFocus: true,
   })
 
   const { data: location } = useQuery({

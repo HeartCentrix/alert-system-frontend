@@ -13,7 +13,10 @@ import useAuthStore from '@/store/authStore'
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
   { label: 'COMMUNICATION', header: true },
-  { label: 'Incoming Messages', icon: Inbox, to: '/incoming' },
+  {
+    label: 'Incoming Messages', icon: Inbox, to: '/incoming',
+    customActive: (pathname, search) => pathname === '/incoming',
+  },
   {
     label: 'Notifications', icon: Bell, to: '/notifications',
     customActive: (pathname, search) =>
@@ -41,7 +44,7 @@ const NAV = [
 // Render navigation item
 function NavItem({ item, sidebarOpen, location }) {
   const Icon = item.icon
-  
+
   if (item.header) {
     return sidebarOpen ? (
       <div className="px-2 pt-4 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">
@@ -49,17 +52,17 @@ function NavItem({ item, sidebarOpen, location }) {
       </div>
     ) : <div className="my-2 border-t border-surface-700/40" />
   }
-  
+
   const isActive = item.customActive
     ? item.customActive(location.pathname, location.search)
-    : false
-  
+    : location.pathname === item.to
+
   return (
     <NavLink
       to={item.to}
-      className={({ isActive: linkIsActive }) => cn(
+      className={() => cn(
         'nav-item',
-        (isActive || linkIsActive) && 'active',
+        isActive && 'active',
         !sidebarOpen && 'justify-center'
       )}
     >
