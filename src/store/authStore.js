@@ -78,31 +78,11 @@ const clearAllSessionData = () => {
   })
 }
 
-// 2026 STANDARD: Explicit cleanup on tab close (NOT page reload)
-// Uses navigation type to distinguish reload vs close
-const registerBeforeUnloadHandler = () => {
-  const handleBeforeUnload = (event) => {
-    // Check if this is a reload (navigation type is 'reload')
-    // or an actual tab/window close (navigation type is 'navigate' or undefined)
-    const navigationType = performance.getEntriesByType('navigation')[0]?.type
-    
-    // Only clear session on actual tab close, NOT on reload
-    // navigationType === 'reload' means user pressed F5 or Ctrl+R
-    // navigationType === 'navigate' or undefined means tab close or navigation away
-    if (navigationType !== 'reload') {
-      // Tab is being closed or navigating away - clear tokens
-      clearAllSessionData()
-    }
-    // For reloads, session storage persists automatically (which is what we want)
-  }
-
-  window.addEventListener('beforeunload', handleBeforeUnload)
-
-  // Return cleanup function
-  return () => {
-    window.removeEventListener('beforeunload', handleBeforeUnload)
-  }
-}
+// NOTE: No beforeunload handler needed
+// sessionStorage automatically:
+// - Persists on page refresh (what we want)
+// - Clears when all tabs are closed (browser behavior)
+// This is more reliable than custom handlers
 
 // Helper: Initialize authentication with token refresh logic
 async function initializeAuth() {
@@ -161,7 +141,7 @@ async function handleTokenRefresh() {
       const expiresIn = refreshData.expires_in || 3600
       saveAccessToken(refreshData.access_token, expiresIn)
 
-      // IMPORTANT: Update Zustand store BEFORE using the token
+      // IMPORTANT: Update Zustand store BEFORE calling /auth/me
       // This ensures the request interceptor uses the NEW token
       const authStore = _getAuthStore?.()
       if (authStore) {
@@ -169,9 +149,9 @@ async function handleTokenRefresh() {
         authStore.setRefreshToken?.(refreshData.refresh_token || refreshTokenFromStorage)
       }
 
-      // Use user data from refresh response (no need to call /auth/me)
-      // Backend returns user data in refresh response for this exact reason
-      const userData = refreshData.user
+      // Fetch user data with NEW token
+      // Backend may or may not return user in refresh response, so we call /auth/me
+      const { data: userData } = await authAPI.me()
 
       return {
         accessToken: refreshData.access_token,
@@ -205,19 +185,11 @@ const useAuthStore = create((set, get) => ({
   mfaSecret: null,
   // Heartbeat interval ID
   heartbeatIntervalId: null,
-  // Session cleanup handler
-  cleanupHandler: null,
 
   init: async () => {
     // Prevent duplicate initialization
     if (get().isInitializing) return
     set({ isInitializing: true })
-
-    // 2026 STANDARD: Register beforeunload handler for tab close cleanup
-    if (!get().cleanupHandler) {
-      const cleanupHandler = registerBeforeUnloadHandler()
-      set({ cleanupHandler })
-    }
 
     try {
       // Initialize authentication (handles token validation and refresh)
@@ -231,7 +203,7 @@ const useAuthStore = create((set, get) => ({
     } catch (error) {
       // Log error for debugging (production-safe)
       console.error('[AuthStore] Initialization failed:', error?.message || error)
-      
+
       // Authentication failed - clear all session data
       clearAllSessionData()
       set({
@@ -438,17 +410,17 @@ const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try { 
-      // 2026 STANDARD: Notify backend to invalidate session
+      // Notify backend to invalidate session
       await authAPI.logout() 
     } catch {}
     
-    // 2026 STANDARD: Stop heartbeat first
+    // Stop heartbeat first
     get().stopHeartbeat()
     
-    // 2026 STANDARD: Clear ALL session data (not just tokens)
+    // Clear ALL session data
     clearAllSessionData()
     
-    // 2026 STANDARD: Clear store state
+    // Clear store state
     set({
       accessToken: null,
       refreshToken: null,
@@ -460,23 +432,16 @@ const useAuthStore = create((set, get) => ({
       mfaQRCodeURI: null,
       mfaSecret: null,
     })
-    
-    // 2026 STANDARD: Remove beforeunload handler
-    const { cleanupHandler } = get()
-    if (cleanupHandler) {
-      cleanupHandler()
-      set({ cleanupHandler: null })
-    }
   },
 
   clearSession: () => {
-    // 2026 STANDARD: Stop heartbeat first
+    // Stop heartbeat first
     get().stopHeartbeat()
     
-    // 2026 STANDARD: Clear ALL session data
+    // Clear ALL session data
     clearAllSessionData()
     
-    // 2026 STANDARD: Clear store state
+    // Clear store state
     set({
       accessToken: null,
       refreshToken: null,
@@ -488,13 +453,6 @@ const useAuthStore = create((set, get) => ({
       mfaQRCodeURI: null,
       mfaSecret: null,
     })
-    
-    // 2026 STANDARD: Remove beforeunload handler
-    const { cleanupHandler } = get()
-    if (cleanupHandler) {
-      cleanupHandler()
-      set({ cleanupHandler: null })
-    }
   },
 
   updateUser: (updatedUser) => {
