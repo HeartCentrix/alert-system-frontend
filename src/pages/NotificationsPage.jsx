@@ -337,21 +337,37 @@ export function NotificationDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedDelivery?.map(log => (
-                    <tr key={log.id} className="table-row text-sm">
-                      <td className="px-4 py-2 text-slate-300 whitespace-nowrap">{log.user_name || '—'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{channelIcon(log.channel)} {channelLabel(log.channel)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={cn(
-                          'badge',
-                          log.status === 'delivered' ? 'badge-green' :
-                          log.status === 'sent' ? 'badge-blue' :
-                          log.status === 'failed' ? 'badge-red' : 'badge-gray'
-                        )}>{log.status}</span>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-500 font-mono whitespace-nowrap">{maskPII(log.to_address)}</td>
-                    </tr>
-                  ))}
+                  {paginatedDelivery?.map(log => {
+                    // Check if this is a webhook delivery log (Slack/Teams)
+                    const isWebhook = log.channel === 'slack' || log.channel === 'teams';
+                    return (
+                      <tr key={log.id} className="table-row text-sm">
+                        <td className="px-4 py-2 text-slate-300 whitespace-nowrap">
+                          {isWebhook ? (
+                            <span className="text-slate-400">Webhook</span>
+                          ) : (
+                            log.user_name || '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{channelIcon(log.channel)} {channelLabel(log.channel)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={cn(
+                            'badge',
+                            log.status === 'delivered' ? 'badge-green' :
+                            log.status === 'sent' ? 'badge-blue' :
+                            log.status === 'failed' ? 'badge-red' : 'badge-gray'
+                          )}>{log.status}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-500 font-mono whitespace-nowrap">
+                          {isWebhook ? (
+                            <span className="text-slate-400">webhook</span>
+                          ) : (
+                            maskPII(log.to_address)
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {!paginatedDelivery?.length && (
                     <tr><td colSpan={4} className="text-center py-8 text-slate-500 text-sm">No delivery logs yet</td></tr>
                   )}
