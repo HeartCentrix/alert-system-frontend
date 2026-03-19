@@ -75,9 +75,17 @@ function UserProfileExpanded({ user, onLogout, onNavigateSettings }) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <div
             onClick={onNavigateSettings}
-            className="w-full flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 transition-colors text-left"
+            className="w-full flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 transition-colors text-left cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigateSettings()
+              }
+            }}
             aria-label="Open account settings"
           >
             <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -99,7 +107,7 @@ function UserProfileExpanded({ user, onLogout, onNavigateSettings }) {
             >
               <LogOut size={15} />
             </button>
-          </button>
+          </div>
         </TooltipTrigger>
         <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
           <div className="text-center">
