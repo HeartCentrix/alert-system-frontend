@@ -164,12 +164,12 @@ async function handleTokenRefresh() {
 
       // IMPORTANT: Update Zustand store BEFORE calling /auth/me
       // This ensures the request interceptor uses the NEW token
-      const authStore = _getAuthStore?.()
-      if (authStore) {
-        authStore.setAccessToken?.(refreshData.access_token)
-        authStore.setRefreshToken?.(refreshData.refresh_token || refreshTokenFromStorage)
-        console.log('[AuthStore] Updated Zustand store with new tokens')
-      }
+      // Note: We're inside authStore.js, so we can use set/get directly
+      set({ 
+        accessToken: refreshData.access_token,
+        refreshToken: refreshData.refresh_token || refreshTokenFromStorage
+      })
+      console.log('[AuthStore] Updated Zustand store with new tokens')
 
       // Fetch user data with NEW token
       console.log('[AuthStore] Calling /auth/me with new token...')
