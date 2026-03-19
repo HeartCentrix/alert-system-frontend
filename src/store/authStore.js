@@ -154,14 +154,22 @@ async function handleTokenRefresh() {
     const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
 
     if (refreshData?.access_token) {
-      // Save new tokens
+      // Save new tokens to sessionStorage
       if (refreshData.refresh_token) {
         saveRefreshToken(refreshData.refresh_token)
       }
       const expiresIn = refreshData.expires_in || 3600
       saveAccessToken(refreshData.access_token, expiresIn)
 
-      // Fetch user data with new token
+      // IMPORTANT: Update Zustand store BEFORE calling /auth/me
+      // This ensures the request interceptor uses the NEW token
+      const authStore = _getAuthStore?.()
+      if (authStore) {
+        authStore.setAccessToken?.(refreshData.access_token)
+        authStore.setRefreshToken?.(refreshData.refresh_token || refreshTokenFromStorage)
+      }
+
+      // Fetch user data with NEW token (interceptor will use updated store)
       const { data: userData } = await authAPI.me()
 
       return {
