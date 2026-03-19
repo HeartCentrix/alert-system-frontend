@@ -40,18 +40,19 @@ export default function SafetyRespondPage() {
     setError(null)
 
     try {
-      // Call backend webhook endpoint to record response
-      await api.get('/webhooks/responded', {
+      // Call backend notifications respond endpoint with token
+      // This matches the reference v1.0.0 implementation
+      await api.post(`/notifications/${id}/respond`, {
+        response_type: responseType,
+        message: ''
+      }, {
         params: {
-          user_id: notification?.user_responses?.[0]?.user_id, // Get from notification
-          notification_id: id,
-          response: responseType,
-          channel: 'email' // or 'sms' based on how they received it
+          token: token // Pass the check-in token from URL
         }
       })
 
-      // Success - show confirmation
-      setLoading(false)
+      // Success - redirect to success page
+      window.location.href = '/responded'
     } catch (err) {
       setError('Failed to record response. Please try again.')
       setSubmitting(false)
