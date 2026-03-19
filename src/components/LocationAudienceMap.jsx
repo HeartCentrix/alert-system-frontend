@@ -259,21 +259,51 @@ export default function LocationAudienceMap({
                   }}
                 >
                   <Popup>
-                    <div className="p-2 min-w-[200px]">
-                      <div className="font-semibold text-slate-900 mb-1">
+                    <div style={{
+                      background: '#1e293b',
+                      color: '#f1f5f9',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      minWidth: '200px',
+                      fontSize: '13px',
+                      lineHeight: '1.5',
+                    }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: '#f1f5f9' }}>
                         {location.name}
                       </div>
-                      <div className="text-sm text-slate-600 space-y-1">
-                        <div>Radius: {location.geofence_radius_miles} miles</div>
-                        <div>Members: {location.memberCount || 0}</div>
-                        <div className={`text-xs ${location.is_active ? 'text-success-600' : 'text-slate-500'}`}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ color: '#64748b', fontSize: 12 }}>Radius</span>
+                        <span style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 600 }}>
+                          {location.geofence_radius_miles} miles
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span style={{ color: '#64748b', fontSize: 12 }}>Members</span>
+                        <span style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 600 }}>
+                          {location.memberCount || 0}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#64748b', fontSize: 12 }}>Status</span>
+                        <span style={{ color: location.is_active ? '#22c55e' : '#64748b', fontSize: 12, fontWeight: 600 }}>
                           {location.is_active ? 'Active' : 'Inactive'}
-                        </div>
+                        </span>
                       </div>
                       {onLocationSelect && (
                         <button
                           onClick={() => handleLocationClick(location)}
-                          className="mt-2 w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                          style={{
+                            width: '100%',
+                            marginTop: '10px',
+                            padding: '8px 12px',
+                            background: '#2563eb',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
                         >
                           View Details
                         </button>
@@ -292,26 +322,57 @@ export default function LocationAudienceMap({
                 }}
               >
                 <Popup>
-                  <div className="p-2 min-w-[200px]">
-                    <div className="font-semibold text-slate-900 mb-1">
+                  <div style={{
+                    background: '#1e293b',
+                    color: '#f1f5f9',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    minWidth: '220px',
+                    fontSize: '13px',
+                    lineHeight: '1.5',
+                  }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: '#f1f5f9' }}>
                       {location.name}
                     </div>
-                    <div className="text-sm text-slate-600 space-y-1">
-                      <div>
-                        {location.city && location.state 
-                          ? `${location.city}, ${location.state}`
-                          : location.address}
-                      </div>
-                      <div>Radius: {location.geofence_radius_miles} miles</div>
-                      <div>Members: {location.memberCount || 0}</div>
-                      <div className={`text-xs ${location.is_active ? 'text-success-600' : 'text-slate-500'}`}>
+                    <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8 }}>
+                      {location.city && location.state
+                        ? `${location.city}, ${location.state}`
+                        : location.address || ''}
+                    </div>
+                    <div style={{ borderTop: '1px solid #334155', marginBottom: 8 }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ color: '#64748b', fontSize: 12 }}>Radius</span>
+                      <span style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 600 }}>
+                        {location.geofence_radius_miles} miles
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{ color: '#64748b', fontSize: 12 }}>Members</span>
+                      <span style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 600 }}>
+                        {location.memberCount || 0}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748b', fontSize: 12 }}>Status</span>
+                      <span style={{ color: location.is_active ? '#22c55e' : '#64748b', fontSize: 12, fontWeight: 600 }}>
                         {location.is_active ? 'Active' : 'Inactive'}
-                      </div>
+                      </span>
                     </div>
                     {onLocationSelect && (
                       <button
                         onClick={() => handleLocationClick(location)}
-                        className="mt-2 w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                        style={{
+                          width: '100%',
+                          marginTop: '10px',
+                          padding: '8px 12px',
+                          background: '#2563eb',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
                       >
                         View Details
                       </button>
