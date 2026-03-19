@@ -14,10 +14,19 @@ export function setAuthStoreAccessor(fn) {
   _getAuthStore = fn
 }
 
+// 2026 STANDARD: Session key constants (must match authStore.js)
+const SESSION_KEYS = {
+  ACCESS_TOKEN: 'tm_access_token',
+  REFRESH_TOKEN: 'tm_refresh_token',
+  SESSION_ID: 'tm_session_id',
+  TOKEN_EXPIRY: 'tm_token_expiry',
+}
+
 function clearAuthData() {
-  sessionStorage.removeItem('access_token')
-  sessionStorage.removeItem('refresh_token')
-  sessionStorage.removeItem('user')
+  // 2026 STANDARD: Clear ALL session data
+  Object.values(SESSION_KEYS).forEach(key => {
+    sessionStorage.removeItem(key)
+  })
 }
 
 // ── Anti-forgery helper ─────────────────────────────────────────────────────
@@ -47,6 +56,65 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// ── Response interceptor helpers ─────────────────────────────────────────────
+
+function isCsrfError(err) {
+  return err.response?.status === 403 && err.response?.data?.detail?.includes('CSRF')
+}
+
+function isAuthEndpointUrl(url) {
+  const authPaths = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/auth/me', '/auth/refresh']
+  return authPaths.some(path => url?.includes(path))
+}
+
+function isAuthFailureStatus(err) {
+  return (
+    err.response?.status === 401 ||
+    (err.response?.status === 403 && err.response?.data?.detail === 'Not authenticated')
+  )
+}
+
+function handleExpiredSession() {
+  const currentPath = globalThis.location.pathname
+  const isPublicPage =
+    currentPath === '/login' ||
+    currentPath === '/forgot-password' ||
+    currentPath === '/reset-password' ||
+    currentPath.startsWith('/notifications/') ||
+    currentPath === '/responded'
+
+  _getAuthStore?.()?.clearSession?.()
+  if (!isPublicPage) {
+    globalThis.location.href = '/#/login'
+  }
+}
+
+async function executeTokenRefresh() {
+  const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
+
+  const { data } = await axios.post(
+    `${API_BASE}/auth/refresh`,
+    refreshToken ? { refresh_token: refreshToken } : {},
+    { withCredentials: true }
+  )
+
+  _getAuthStore?.()?.setAccessToken?.(data.access_token)
+  if (data.refresh_token) {
+    sessionStorage.setItem('refresh_token', data.refresh_token)
+    _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
+  }
+
+  return { access_token: data.access_token, refresh_token: data.refresh_token }
+}
+
+async function retryWithNewToken(original, tokens) {
+  const retryConfig = {
+    ...original,
+    headers: { ...original.headers, Authorization: `Bearer ${tokens.access_token}` },
+  }
+  return api.request(retryConfig)
+}
+
 // ── Response interceptor ─────────────────────────────────────────────────────
 api.interceptors.response.use(
   (res) => {
@@ -57,14 +125,13 @@ api.interceptors.response.use(
   async (err) => {
     const original = err.config
 
-    if (
-      err.response?.status === 403 &&
-      err.response?.data?.detail?.includes('CSRF')
-    ) {
+    // Handle CSRF errors
+    if (err.response?.status === 403 && err.response?.data?.detail?.includes('CSRF')) {
       window.location.reload()
-      return Promise.reject(err)
+      throw err
     }
 
+    // Skip token refresh for auth endpoints
     const isAuthEndpoint =
       original?.url?.includes('/auth/login') ||
       original?.url?.includes('/auth/forgot-password') ||
@@ -72,99 +139,112 @@ api.interceptors.response.use(
       original?.url?.includes('/auth/me') ||
       original?.url?.includes('/auth/refresh')
 
-    if (isAuthEndpoint) return Promise.reject(err)
+    if (isAuthEndpoint) throw err
 
-    // Handle 401 or 403 "Not authenticated" (FastAPI HTTPBearer returns 403 when no Authorization header)
+    // Handle 401 or 403 "Not authenticated"
     const isAuthFailure =
       err.response?.status === 401 ||
       (err.response?.status === 403 && err.response?.data?.detail === 'Not authenticated')
 
-    if (isAuthFailure && original?._retry !== true) {
-      if (original) original._retry = true
+    if (!isAuthFailure || original?._retry === true) {
+      throw err
+    }
 
-      if (refreshPromise) {
-        try {
-          const tokens = await refreshPromise
-          if (tokens) {
-            original.headers.Authorization = `Bearer ${tokens.access_token}`
-            return api(original)
-          }
-        } catch { /* fall through to reject */ }
-        return Promise.reject(err)
-      }
+    original._retry = true
 
-      refreshPromise = (async () => {
-        try {
-          const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
-
-          const { data } = await axios.post(
-            `${API_BASE}/auth/refresh`,
-            refreshToken ? { refresh_token: refreshToken } : {},
-            { withCredentials: true }
-          )
-
-          _getAuthStore?.()?.setAccessToken?.(data.access_token)
-          if (data.refresh_token) {
-            sessionStorage.setItem('refresh_token', data.refresh_token)
-            _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
-          }
-
-          return { access_token: data.access_token, refresh_token: data.refresh_token }
-        } catch (refreshErr) {
-          // Refresh failed — session fully expired
-          // Only redirect if we're not on a public page
-          const currentPath = window.location.pathname
-          const isPublicPage =
-            currentPath === '/login' ||
-            currentPath === '/forgot-password' ||
-            currentPath === '/reset-password' ||
-            currentPath.startsWith('/notifications/') ||
-            currentPath === '/responded'
-
-          if (!isPublicPage) {
-            _getAuthStore?.()?.clearSession?.()
-            window.location.href = '/#/login'
-          } else {
-            // On public page - just clear session, don't redirect
-            _getAuthStore?.()?.clearSession?.()
-          }
-          throw refreshErr
-        } finally {
-          refreshPromise = null
-        }
-      })()
-
+    // Wait for any existing refresh request
+    if (refreshPromise) {
       try {
         const tokens = await refreshPromise
         if (tokens) {
-          // Manually set the Authorization header for the retry
-          const retryConfig = {
-            ...original,
-            headers: {
-              ...original.headers,
-              Authorization: `Bearer ${tokens.access_token}`
-            }
-          }
-          return api.request(retryConfig)
+          original.headers.Authorization = `Bearer ${tokens.access_token}`
+          return api(original)
         }
-      } catch (refreshErr) {
-        return Promise.reject(refreshErr)
+      } catch {
+        // Fall through to reject
       }
+      throw err
     }
 
-    return Promise.reject(err)
+    // Start token refresh
+    refreshPromise = refreshAccessToken()
+
+    try {
+      const tokens = await refreshPromise
+      if (tokens) {
+        const retryConfig = {
+          ...original,
+          headers: {
+            ...original.headers,
+            Authorization: `Bearer ${tokens.access_token}`
+          }
+        }
+        return api.request(retryConfig)
+      }
+    } catch (refreshErr) {
+      throw refreshErr
+    }
+
+    throw err
   }
 )
+
+// Refresh access token using refresh token
+async function refreshAccessToken() {
+  try {
+    const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem(SESSION_KEYS.REFRESH_TOKEN) || null
+
+    const { data } = await axios.post(
+      `${API_BASE}/auth/refresh`,
+      refreshToken ? { refresh_token: refreshToken } : {},
+      { withCredentials: true }
+    )
+
+    // 2026 STANDARD: Save with expiry time
+    const expiresIn = data.expires_in || 3600
+    _getAuthStore?.()?.setAccessToken?.(data.access_token)
+    if (data.refresh_token) {
+      sessionStorage.setItem(SESSION_KEYS.REFRESH_TOKEN, data.refresh_token)
+      _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
+    }
+    // Store token expiry
+    const expiryTime = Date.now() + (expiresIn * 1000)
+    sessionStorage.setItem(SESSION_KEYS.TOKEN_EXPIRY, expiryTime.toString())
+
+    return { access_token: data.access_token, refresh_token: data.refresh_token }
+  } catch (refreshErr) {
+    // Refresh failed — session fully expired
+    const currentPath = window.location.pathname
+    const isPublicPage =
+      currentPath === '/login' ||
+      currentPath === '/forgot-password' ||
+      currentPath === '/reset-password' ||
+      currentPath.startsWith('/notifications/') ||
+      currentPath === '/responded'
+
+    if (!isPublicPage) {
+      _getAuthStore?.()?.clearSession?.()
+      window.location.href = '/#/login'
+    } else {
+      _getAuthStore?.()?.clearSession?.()
+    }
+    throw refreshErr
+  } finally {
+    refreshPromise = null
+  }
+}
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
+  ldapLogin: (username, password) => api.post('/auth/ldap/login', { username, password }),
   logout: () => api.post('/auth/logout', {}),
   refresh: (refreshToken) => api.post('/auth/refresh',
     refreshToken ? { refresh_token: refreshToken } : {},
     { withCredentials: true }
   ),
   me: () => api.get('/auth/me'),
+  getProviders: () => api.get('/auth/providers'),
   updateProfile: (data) => api.put('/auth/me', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, new_password) => api.post('/auth/reset-password', { token, new_password }),

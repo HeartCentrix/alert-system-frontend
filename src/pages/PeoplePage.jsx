@@ -7,43 +7,142 @@ import { getInitials, cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import useAuthStore from '@/store/authStore'
 import ModalPortal from '@/components/ui/ModalPortal'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 const ROLES = ['viewer', 'manager', 'admin', 'super_admin']
 
 function generateTempPassword() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
   const length = 16
-  let password = ''
-  // Ensure at least one of each type
-  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]
-  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]
-  password += '0123456789'[Math.floor(Math.random() * 10)]
-  password += '!@#$%^&*'[Math.floor(Math.random() * 8)]
-  // Fill the rest randomly
-  for (let i = password.length; i < length; i++) {
-    password += chars[Math.floor(Math.random() * chars.length)]
+  const passwordChars = [
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)],
+    'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)],
+    '0123456789'[Math.floor(Math.random() * 10)],
+    '!@#$%^&*'[Math.floor(Math.random() * 8)],
+  ]
+  
+  for (let i = 4; i < length; i++) {
+    passwordChars.push(chars[Math.floor(Math.random() * chars.length)])
   }
-  return password.split('').sort(() => Math.random() - 0.5).join('')
+  
+  return passwordChars.sort(() => Math.random() - 0.5).join('')
 }
 
 // Clean form data by converting empty strings to null and removing empty location_id
-function cleanUserData(data) {
+// Also removes 'role' field for self-edits to avoid permission errors
+function cleanUserData(data, isSelfEdit) {
   const cleaned = { ...data }
-  
-  // Convert empty strings to null for optional fields
   const optionalFields = ['phone', 'department', 'title', 'employee_id']
+
   optionalFields.forEach(field => {
-    if (cleaned[field] === '' || cleaned[field] === null || cleaned[field] === undefined) {
-      delete cleaned[field]
-    }
+    if (!cleaned[field]) delete cleaned[field]
   })
+
+  if (!cleaned.location_id) delete cleaned.location_id
   
-  // Handle location_id - convert empty string to undefined (omit from request)
-  if (cleaned.location_id === '' || cleaned.location_id === null || cleaned.location_id === undefined) {
-    delete cleaned.location_id
+  // Remove role field for self-edits to avoid "Only admins can change user roles" error
+  if (isSelfEdit) {
+    delete cleaned.role
+  }
+
+  return cleaned
+}
+
+// Format validation error message for a specific field
+function formatFieldError(field, rawMsg) {
+  const friendlyMessages = {
+    email: 'Enter a valid email address (e.g., name@company.com)',
+    phone: 'Phone can only contain numbers, spaces, and symbols like +, -, (, )',
+    password: 'Password must be at least 8 characters',
+    first_name: rawMsg.includes('required') || rawMsg.includes('length') 
+      ? 'This field is required' 
+      : 'Use only letters, spaces, hyphens, and apostrophes',
+    last_name: rawMsg.includes('required') || rawMsg.includes('length')
+      ? 'This field is required'
+      : 'Use only letters, spaces, hyphens, and apostrophes',
   }
   
-  return cleaned
+  return friendlyMessages[field] || rawMsg
+}
+
+// Extract error messages from validation response
+function extractValidationErrors(errors) {
+  return errors.map(e => {
+    const field = e.loc?.[1] || e.loc?.[0] || 'field'
+    const rawMsg = e.msg || ''
+    const friendlyMsg = formatFieldError(field, rawMsg)
+    return `${field.replace('_', ' ')}: ${friendlyMsg}`
+  })
+}
+
+// Get user-friendly error message from API error
+function getUserErrorMessage(error) {
+  const defaultMsg = 'Error saving user'
+  
+  if (!error?.response) return defaultMsg
+  
+  const { status, data } = error.response
+  
+  if (status === 401) return 'Session expired. Please log in again.'
+  if (status === 403) return 'You do not have permission to perform this action.'
+  
+  if (status === 422 && Array.isArray(data?.detail)) {
+    const fieldErrors = extractValidationErrors(data.detail)
+    return fieldErrors.join(', ')
+  }
+  
+  if (data?.detail) {
+    return typeof data.detail === 'object' ? data.detail.message : data.detail
+  }
+  
+  return error.message || defaultMsg
+}
+
+// ── UserModal helpers ────────────────────────────────────────────────────────
+
+function buildFieldErrorMessage(e) {
+  const field = e.loc?.[1] || e.loc?.[0] || 'field'
+  const rawMsg = e.msg || ''
+  let friendlyMsg = rawMsg
+
+  if (field === 'email' && (rawMsg.includes('email') || rawMsg.includes('@'))) {
+    friendlyMsg = 'Enter a valid email address (e.g., name@company.com)'
+  } else if (field === 'phone' && rawMsg.includes('pattern')) {
+    friendlyMsg = 'Phone can only contain numbers, spaces, and symbols like +, -, (, )'
+  } else if (field === 'password' && rawMsg.includes('8')) {
+    friendlyMsg = 'Password must be at least 8 characters'
+  } else if ((field === 'first_name' || field === 'last_name')) {
+    if (rawMsg.includes('required') || rawMsg.includes('length')) {
+      friendlyMsg = 'This field is required'
+    } else if (rawMsg.includes('pattern')) {
+      friendlyMsg = 'Use only letters, spaces, hyphens, and apostrophes'
+    }
+  }
+
+  return `${field.replace('_', ' ')}: ${friendlyMsg}`
+}
+
+function parseUserApiError(error) {
+  if (error.response?.status === 401) {
+    return 'Session expired. Please log in again.'
+  }
+  if (error.response?.status === 403) {
+    return 'You do not have permission to perform this action.'
+  }
+  if (error.response?.status === 422) {
+    const details = error.response?.data?.detail
+    if (Array.isArray(details)) {
+      return details.map(buildFieldErrorMessage).join(', ')
+    }
+    if (details) {
+      return typeof details === 'object' ? details.message : details
+    }
+  }
+  if (error.response?.data?.detail) {
+    const detail = error.response.data.detail
+    return typeof detail === 'object' ? detail.message : detail
+  }
+  return error.message || 'Error saving user'
 }
 
 function UserModal({ user, onClose, onSaved }) {
@@ -99,33 +198,53 @@ function UserModal({ user, onClose, onSaved }) {
     // Don't crash the component - just continue with empty locations list
   }
 
+  const handleUpdate = async (data, cleanedData) => {
+    await usersAPI.update(user.id, cleanedData)
+    await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+    toast.success('User updated')
+    onSaved()
+    onClose()
+  }
+
+  const handleCreate = async (data, cleanedData) => {
+    const password = data.password || generateTempPassword()
+    console.log('Creating user with data:', { ...cleanedData, password })
+    await usersAPI.create({ ...cleanedData, password })
+    await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+
+    if (!data.password) {
+      setGeneratedPassword(password)
+      toast.success('User created! Copy the password below')
+      reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+    } else {
+      toast.success('User created')
+      onSaved()
+      onClose()
+    }
+  }
+
   const onSubmit = async (data) => {
     setLoading(true)
     try {
-      console.log('Form data:', data)
-      // Clean the data to remove empty strings
-      const cleanedData = cleanUserData(data)
-      console.log('Cleaned data:', cleanedData)
+      // Check if user is editing their own profile
+      const isSelfEdit = user?.id && user.id === currentUser?.id
+      const cleanedData = cleanUserData(data, isSelfEdit)
 
       if (user?.id) {
         await usersAPI.update(user.id, cleanedData)
-        // Invalidate and refetch filter options to include new department/title
+        await queryClient.invalidateQueries({ queryKey: ['users'], refetchType: 'all' })
         await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
         toast.success('User updated')
         onSaved()
         onClose()
       } else {
         const password = data.password || generateTempPassword()
-        console.log('Creating user with data:', { ...cleanedData, password })
         await usersAPI.create({ ...cleanedData, password })
-
-        // Invalidate and refetch filter options to include new department/title
         await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
 
         if (!data.password) {
           setGeneratedPassword(password)
           toast.success('User created! Copy the password below')
-          // Reset form to prevent re-submission
           reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
         } else {
           toast.success('User created')
@@ -134,77 +253,8 @@ function UserModal({ user, onClose, onSaved }) {
         }
       }
     } catch (error) {
-      console.error('Error saving user:', error)
-
-      // Handle different error types
-      let errorMessage = 'Error saving user'
-
-      if (error.response?.status === 401) {
-        errorMessage = 'Session expired. Please log in again.'
-        // Auth interceptor in api.js handles session expiry globally.
-        // The window.location redirect happens there automatically.
-      } else if (error.response?.status === 403) {
-        errorMessage = 'You do not have permission to perform this action.'
-      } else if (error.response?.status === 422) {
-        // Validation error - extract field-specific errors
-        const errors = error.response?.data?.detail
-        if (Array.isArray(errors)) {
-          // Format: [{loc: ['body', 'email'], msg: '...', type: '...'}]
-          const fieldErrors = errors.map(e => {
-            const field = e.loc?.[1] || e.loc?.[0] || 'field'
-            const rawMsg = e.msg || ''
-            
-            // Convert technical messages to human-readable
-            let friendlyMsg = rawMsg
-            
-            // Email validation messages
-            if (field === 'email') {
-              if (rawMsg.includes('email') || rawMsg.includes('@')) {
-                friendlyMsg = 'Enter a valid email address (e.g., name@company.com)'
-              }
-            }
-            
-            // Phone validation messages
-            if (field === 'phone') {
-              if (rawMsg.includes('pattern')) {
-                friendlyMsg = 'Phone can only contain numbers, spaces, and symbols like +, -, (, )'
-              }
-            }
-            
-            if (field === 'password') {
-              if (rawMsg.includes('8')) {
-                friendlyMsg = 'Password must be at least 8 characters'
-              }
-            }
-            
-            // Name validation messages
-            if (field === 'first_name' || field === 'last_name') {
-              if (rawMsg.includes('required') || rawMsg.includes('length')) {
-                friendlyMsg = 'This field is required'
-              }
-              if (rawMsg.includes('pattern')) {
-                friendlyMsg = 'Use only letters, spaces, hyphens, and apostrophes'
-              }
-            }
-            
-            return `${field.replace('_', ' ')}: ${friendlyMsg}`
-          })
-          errorMessage = fieldErrors.join(', ')
-        } else if (error.response?.data?.detail) {
-          errorMessage = typeof error.response.data.detail === 'object'
-            ? error.response.data.detail.message
-            : error.response.data.detail
-        }
-      } else if (error.response?.data?.detail) {
-        errorMessage = typeof error.response.data.detail === 'object'
-          ? error.response.data.detail.message
-          : error.response.data.detail
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-      
+      const errorMessage = getUserErrorMessage(error)
       toast.error(errorMessage)
-      // Keep modal open on error so user can fix issues
     } finally {
       setLoading(false)
     }
@@ -491,6 +541,119 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
   )
 }
 
+// Get badge class based on user role
+function getRoleBadgeClass(role) {
+  const roleClasses = {
+    super_admin: 'badge-red',
+    admin: 'badge-orange',
+    manager: 'badge-blue',
+  }
+  return roleClasses[role] || 'badge-gray'
+}
+
+// Get status badge class based on online state
+function getStatusBadgeClass(isOnline) {
+  return isOnline ? 'badge-green' : 'badge-red'
+}
+
+// Get button className based on user state
+function getActionButtonClass(isSelf, isDeleting) {
+  if (isSelf || isDeleting) return "text-slate-700 cursor-not-allowed"
+  return "text-slate-500 hover:text-danger-400"
+}
+
+// Get button title based on user state
+function getActionButtonTitle(isSelf, isDeleting) {
+  if (isSelf) return "You cannot delete yourself"
+  if (isDeleting) return "Deleting..."
+  return "Delete"
+}
+
+// Render delete icon or spinner
+function DeleteIcon({ isDeleting }) {
+  if (isDeleting) {
+    return (
+      <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+    )
+  }
+  return <Trash2 size={14} />
+}
+
+// Table row component for user display
+function UserTableRow({ user, currentUser, isSelected, isDeleting, isAdmin, onToggleSelect, onEdit, onDelete }) {
+  const isSelf = user.id === currentUser?.id
+
+  return (
+    <tr key={user.id} className={cn("table-row", isSelected ? "bg-primary-900/20" : "")}>
+      {isAdmin && (
+        <td className="px-4 py-3.5">
+          <button
+            onClick={() => onToggleSelect(user.id)}
+            disabled={isSelf}
+            className={cn(
+              "hover:text-slate-300 transition-colors",
+              isSelf ? "text-slate-700 cursor-not-allowed" : isSelected ? "text-primary-400" : "text-slate-500"
+            )}
+            title={isSelf ? "You cannot delete yourself" : isSelected ? "Deselect" : "Select"}
+          >
+            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+          </button>
+        </td>
+      )}
+      <td className="px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
+            {getInitials(user.full_name)}
+          </div>
+          <div>
+            <div className="text-sm font-medium text-slate-200">{user.full_name}</div>
+            <div className="text-xs text-slate-500">{user.employee_id && `#${user.employee_id}`}</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-5 py-3.5">
+        <div className="text-xs text-slate-400">{user.email}</div>
+        {user.phone && <div className="text-xs text-slate-500 font-mono">{user.phone}</div>}
+      </td>
+      <td className="px-5 py-3.5 text-sm text-slate-400">{user.department || '—'}</td>
+      <td className="px-5 py-3.5">
+        <span className={cn('badge', getRoleBadgeClass(user.role))}>
+          {user.role?.replaceAll('_', ' ')}
+        </span>
+      </td>
+      <td className="px-5 py-3.5">
+        <span className={getStatusBadgeClass(user.is_online)}>
+          {user.is_online ? 'Active' : 'Inactive'}
+        </span>
+      </td>
+      <td className="px-5 py-3.5">
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => onEdit(user)}
+            className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+            disabled={isDeleting(user.id)}
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={() => {
+              if (confirm(`Delete ${user.full_name}?`)) onDelete(user.id)
+            }}
+            disabled={isSelf || isDeleting(user.id)}
+            className={cn("p-1.5 transition-colors", getActionButtonClass(isSelf, isDeleting(user.id)))}
+            title={getActionButtonTitle(isSelf, isDeleting(user.id))}
+          >
+            <DeleteIcon isDeleting={isDeleting(user.id)} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 export default function PeoplePage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
@@ -502,6 +665,9 @@ export default function PeoplePage() {
   const fileRef = useRef()
   const [importing, setImporting] = useState(false)
 
+  // Check if page is visible to enable/disable auto-refresh
+  const isVisible = useIsDocumentVisible()
+
   // Debounce search input to avoid excessive API calls
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -510,14 +676,14 @@ export default function PeoplePage() {
     }, 300)
     return () => clearTimeout(timer)
   }, [searchInput])
-  
+
   const currentUser = useAuthStore(state => state.user)
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['users', page, search],
     queryFn: () => usersAPI.list({ page, page_size: 20, search: search || undefined }).then(r => r.data),
-    refetchInterval: 30000, // Refresh every 30 seconds to show real-time online status
+    refetchInterval: isVisible ? 10000 : false, // Refresh every 10s when visible for real-time status
     refetchIntervalInBackground: true, // Also refresh when tab is in background
   })
 
@@ -525,11 +691,8 @@ export default function PeoplePage() {
     mutationFn: (id) => usersAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); toast.success('User deleted') },
     onError: (error) => {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
-                            : 'Error deleting user')
-      toast.error(errorMessage || 'Error deleting user')
+      const errorMessage = error.response?.data?.detail || 'Error deleting user'
+      toast.error(errorMessage)
     },
   })
 
@@ -551,11 +714,8 @@ export default function PeoplePage() {
       }
     },
     onError: (error) => {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
-                            : 'Error deleting users')
-      toast.error(errorMessage || 'Error deleting users')
+      const errorMessage = error.response?.data?.detail || 'Error deleting users'
+      toast.error(errorMessage)
     },
   })
 
@@ -566,7 +726,6 @@ export default function PeoplePage() {
     const file = e.target.files[0]
     if (!file) return
 
-    // Validate file type using MIME type (not just extension)
     const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
     if (!allowedTypes.includes(file.type)) {
       toast.error(`Invalid file type. Expected CSV, got ${file.type || 'unknown'}`)
@@ -578,7 +737,6 @@ export default function PeoplePage() {
     try {
       const { data: result } = await usersAPI.importCSV(file)
 
-      // Build success message with email notification info
       let message = `Import complete: ${result.created} created, ${result.updated} updated`
       if (result.created > 0) {
         message += `. Welcome emails sent to ${result.created} new user${result.created > 1 ? 's' : ''}`
@@ -589,23 +747,17 @@ export default function PeoplePage() {
 
       toast.success(message)
 
-      if (result.errors?.length) {
+      if (result.errors?.length && result.failed > 0) {
         console.warn('Import errors:', result.errors)
-        // Show error toast if there were failures
-        if (result.failed > 0) {
-          toast.error(`${result.failed} row(s) failed - check console for details`)
-        }
+        toast.error(`${result.failed} row(s) failed - check console for details`)
       }
 
       qc.invalidateQueries({ queryKey: ['users'] })
       qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
       qc.invalidateQueries({ queryKey: ['map-data'] })
     } catch (error) {
-      const errorMessage = error.response?.data?.detail ||
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
-                            : 'Import failed')
-      toast.error(errorMessage || 'Import failed')
+      const errorMessage = error.response?.data?.detail || 'Import failed'
+      toast.error(errorMessage)
     } finally {
       setImporting(false)
       e.target.value = ''
@@ -751,95 +903,19 @@ export default function PeoplePage() {
             {!isLoading && users.length === 0 && (
               <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12 text-slate-500 text-sm">No people found</td></tr>
             )}
-            {users.map(u => {
-              const isSelected = selectedUsers.has(u.id)
-              const isSelf = u.id === currentUser?.id
-              
-              return (
-                <tr key={u.id} className={cn(
-                  "table-row",
-                  isSelected ? "bg-primary-900/20" : ""
-                )}>
-                  {isAdmin && (
-                    <td className="px-4 py-3.5">
-                      <button
-                        onClick={() => toggleSelectUser(u.id)}
-                        disabled={isSelf}
-                        className={cn(
-                          "hover:text-slate-300 transition-colors",
-                          isSelf ? "text-slate-700 cursor-not-allowed" : isSelected ? "text-primary-400" : "text-slate-500"
-                        )}
-                        title={isSelf ? "You cannot delete yourself" : isSelected ? "Deselect" : "Select"}
-                      >
-                        {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                      </button>
-                    </td>
-                  )}
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
-                        {getInitials(u.full_name)}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-200">{u.full_name}</div>
-                        <div className="text-xs text-slate-500">{u.employee_id && `#${u.employee_id}`}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="text-xs text-slate-400">{u.email}</div>
-                    {u.phone && <div className="text-xs text-slate-500 font-mono">{u.phone}</div>}
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-slate-400">{u.department || '—'}</td>
-                  <td className="px-5 py-3.5">
-                    <span className={cn(
-                      'badge',
-                      u.role === 'super_admin' ? 'badge-red' :
-                      u.role === 'admin' ? 'badge-orange' :
-                      u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                    )}>{u.role?.replaceAll('_', ' ')}</span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span className={u.is_active ? 'badge-green' : 'badge-red'}>
-                      {u.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setModal(u)}
-                        className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-                        disabled={isDeleting(u.id)}
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id)
-                        }}
-                        disabled={isSelf || isDeleting(u.id)}
-                        className={cn(
-                          "p-1.5 transition-colors",
-                          isSelf || isDeleting(u.id)
-                            ? "text-slate-700 cursor-not-allowed"
-                            : "text-slate-500 hover:text-danger-400"
-                        )}
-                        title={isSelf ? "You cannot delete yourself" : isDeleting(u.id) ? "Deleting..." : "Delete"}
-                      >
-                        {isDeleting(u.id) ? (
-                          <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+            {users.map(u => (
+              <UserTableRow
+                key={u.id}
+                user={u}
+                currentUser={currentUser}
+                isSelected={selectedUsers.has(u.id)}
+                isDeleting={isDeleting}
+                isAdmin={isAdmin}
+                onToggleSelect={toggleSelectUser}
+                onEdit={setModal}
+                onDelete={(id) => deleteMutation.mutate(id)}
+              />
+            ))}
           </tbody>
         </table>
         </div>
