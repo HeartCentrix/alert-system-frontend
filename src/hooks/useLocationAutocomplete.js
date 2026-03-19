@@ -74,6 +74,7 @@ export function useLocationAutocomplete(options = {}) {
 
   // Persist cache to localStorage (throttled to avoid I/O spam)
   const persistCacheRef = useRef(null)
+  
   const persistCache = useCallback(() => {
     if (persistCacheRef.current) return
 
@@ -86,12 +87,8 @@ export function useLocationAutocomplete(options = {}) {
         localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cacheObj))
       } catch (e) {
         if (e.name === 'QuotaExceededError') {
-          // localStorage FULL — evict oldest half
-          const entries = Array.from(memoryCacheRef.current.entries())
-            .sort((a, b) => (a[1].cachedAt || 0) - (b[1].cachedAt || 0))
-          const toDelete = entries.slice(0, Math.floor(entries.length / 2))
-          toDelete.forEach(([key]) => memoryCacheRef.current.delete(key))
-          // Retry persist
+          evictOldestCacheEntry()
+          // Retry persist after eviction
           try {
             const cacheObj = {}
             memoryCacheRef.current.forEach((value, key) => {
@@ -105,6 +102,14 @@ export function useLocationAutocomplete(options = {}) {
       }
       persistCacheRef.current = null
     }, 2000)
+  }, [])
+
+  // Evict oldest cache entry when storage is full
+  const evictOldestCacheEntry = useCallback(() => {
+    const entries = Array.from(memoryCacheRef.current.entries())
+      .sort((a, b) => (a[1].cachedAt || 0) - (b[1].cachedAt || 0))
+    const toDelete = entries.slice(0, Math.floor(entries.length / 2))
+    toDelete.forEach(([key]) => memoryCacheRef.current.delete(key))
   }, [])
 
   // ── Cache entry generation ────────────────────────────────────────

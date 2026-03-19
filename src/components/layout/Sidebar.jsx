@@ -38,6 +38,99 @@ const NAV = [
   { label: 'My Account', icon: Settings, to: '/settings' },
 ]
 
+// Render navigation item
+function NavItem({ item, sidebarOpen, location }) {
+  const Icon = item.icon
+  
+  if (item.header) {
+    return sidebarOpen ? (
+      <div className="px-2 pt-4 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">
+        {item.label}
+      </div>
+    ) : <div className="my-2 border-t border-surface-700/40" />
+  }
+  
+  const isActive = item.customActive
+    ? item.customActive(location.pathname, location.search)
+    : false
+  
+  return (
+    <NavLink
+      to={item.to}
+      className={({ isActive: linkIsActive }) => cn(
+        'nav-item',
+        (isActive || linkIsActive) && 'active',
+        !sidebarOpen && 'justify-center'
+      )}
+    >
+      <Icon size={16} className="shrink-0" />
+      {sidebarOpen && <span>{item.label}</span>}
+    </NavLink>
+  )
+}
+
+// User profile section for expanded sidebar
+function UserProfileExpanded({ user, onLogout }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors">
+            <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {getInitials(user?.full_name || user?.email || 'U')}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
+              <div className="text-xs text-slate-500 truncate">{user?.role?.replaceAll('_', ' ')}</div>
+            </div>
+            <button
+              onClick={onLogout}
+              className="text-slate-500 hover:text-danger-400 transition-colors"
+              title="Logout"
+              aria-label="Logout"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+          <div className="text-center">
+            <div className="font-medium">{user?.full_name}</div>
+            <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+// User profile section for collapsed sidebar
+function UserProfileCollapsed({ user, onLogout }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-surface-800 text-slate-400 hover:text-danger-400 transition-colors"
+            title="Logout"
+            aria-label="Logout"
+          >
+            <LogOut size={18} />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+          <div className="text-center">
+            <div className="font-medium">{user?.full_name}</div>
+            <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
+            <div className="text-xs text-danger-400 mt-1">Click to logout</div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
@@ -153,105 +246,17 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) 
         'flex-1 overflow-y-auto px-3 space-y-0.5',
         !sidebarOpen && 'px-2'
       )}>
-        {NAV.map((item, i) => {
-          if (item.header) {
-            return sidebarOpen ? (
-              <div key={i} className="px-2 pt-4 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">
-                {item.label}
-              </div>
-            ) : <div key={i} className="my-2 border-t border-surface-700/40" />
-          }
-          const Icon = item.icon
-          if (item.customActive) {
-            const active = item.customActive(location.pathname, location.search)
-            return (
-              <NavLink
-                key={i}
-                to={item.to}
-                className={() => cn(
-                  'nav-item',
-                  active && 'active',
-                  !sidebarOpen && 'justify-center'
-                )}
-              >
-                <Icon size={16} className="shrink-0" />
-                {sidebarOpen && <span>{item.label}</span>}
-              </NavLink>
-            )
-          }
-          return (
-            <NavLink
-              key={i}
-              to={item.to}
-              className={({ isActive }) => cn(
-                'nav-item',
-                isActive && 'active',
-                !sidebarOpen && 'justify-center'
-              )}
-            >
-              <Icon size={16} className="shrink-0" />
-              {sidebarOpen && <span>{item.label}</span>}
-            </NavLink>
-          )
-        })}
+        {NAV.map((item, i) => (
+          <NavItem key={i} item={item} sidebarOpen={sidebarOpen} location={location} />
+        ))}
       </nav>
 
       {/* User profile - sticks to bottom */}
       <div className="mt-auto p-3 border-t border-surface-700/60">
         {sidebarOpen ? (
-          // Expanded: show avatar + name + role + logout
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors">
-                  <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    {getInitials(user?.full_name || user?.email || 'U')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
-                    <div className="text-xs text-slate-500 truncate">{user?.role?.replaceAll('_', ' ')}</div>
-                  </div>
-                  <button 
-                    onClick={handleLogout} 
-                    className="text-slate-500 hover:text-danger-400 transition-colors" 
-                    title="Logout"
-                    aria-label="Logout"
-                  >
-                    <LogOut size={15} />
-                  </button>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
-                <div className="text-center">
-                  <div className="font-medium">{user?.full_name}</div>
-                  <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <UserProfileExpanded user={user} onLogout={handleLogout} />
         ) : (
-          // Collapsed: show only logout button centered
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button 
-                  onClick={handleLogout} 
-                  className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-surface-800 text-slate-400 hover:text-danger-400 transition-colors"
-                  title="Logout"
-                  aria-label="Logout"
-                >
-                  <LogOut size={18} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
-                <div className="text-center">
-                  <div className="font-medium">{user?.full_name}</div>
-                  <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
-                  <div className="text-xs text-danger-400 mt-1">Click to logout</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <UserProfileCollapsed user={user} onLogout={handleLogout} />
         )}
       </div>
     </aside>
