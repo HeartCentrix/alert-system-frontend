@@ -14,10 +14,19 @@ export function setAuthStoreAccessor(fn) {
   _getAuthStore = fn
 }
 
+// 2026 STANDARD: Session key constants (must match authStore.js)
+const SESSION_KEYS = {
+  ACCESS_TOKEN: 'tm_access_token',
+  REFRESH_TOKEN: 'tm_refresh_token',
+  SESSION_ID: 'tm_session_id',
+  TOKEN_EXPIRY: 'tm_token_expiry',
+}
+
 function clearAuthData() {
-  sessionStorage.removeItem('access_token')
-  sessionStorage.removeItem('refresh_token')
-  sessionStorage.removeItem('user')
+  // 2026 STANDARD: Clear ALL session data
+  Object.values(SESSION_KEYS).forEach(key => {
+    sessionStorage.removeItem(key)
+  })
 }
 
 // ── Anti-forgery helper ─────────────────────────────────────────────────────
@@ -183,7 +192,7 @@ api.interceptors.response.use(
 // Refresh access token using refresh token
 async function refreshAccessToken() {
   try {
-    const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
+    const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem(SESSION_KEYS.REFRESH_TOKEN) || null
 
     const { data } = await axios.post(
       `${API_BASE}/auth/refresh`,
@@ -191,11 +200,16 @@ async function refreshAccessToken() {
       { withCredentials: true }
     )
 
+    // 2026 STANDARD: Save with expiry time
+    const expiresIn = data.expires_in || 3600
     _getAuthStore?.()?.setAccessToken?.(data.access_token)
     if (data.refresh_token) {
-      sessionStorage.setItem('refresh_token', data.refresh_token)
+      sessionStorage.setItem(SESSION_KEYS.REFRESH_TOKEN, data.refresh_token)
       _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
     }
+    // Store token expiry
+    const expiryTime = Date.now() + (expiresIn * 1000)
+    sessionStorage.setItem(SESSION_KEYS.TOKEN_EXPIRY, expiryTime.toString())
 
     return { access_token: data.access_token, refresh_token: data.refresh_token }
   } catch (refreshErr) {
