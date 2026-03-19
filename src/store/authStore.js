@@ -161,7 +161,7 @@ async function handleTokenRefresh() {
       const expiresIn = refreshData.expires_in || 3600
       saveAccessToken(refreshData.access_token, expiresIn)
 
-      // IMPORTANT: Update Zustand store BEFORE calling /auth/me
+      // IMPORTANT: Update Zustand store BEFORE using the token
       // This ensures the request interceptor uses the NEW token
       const authStore = _getAuthStore?.()
       if (authStore) {
@@ -169,8 +169,9 @@ async function handleTokenRefresh() {
         authStore.setRefreshToken?.(refreshData.refresh_token || refreshTokenFromStorage)
       }
 
-      // Fetch user data with NEW token (interceptor will use updated store)
-      const { data: userData } = await authAPI.me()
+      // Use user data from refresh response (no need to call /auth/me)
+      // Backend returns user data in refresh response for this exact reason
+      const userData = refreshData.user
 
       return {
         accessToken: refreshData.access_token,
