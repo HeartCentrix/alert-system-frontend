@@ -1,42 +1,74 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
 import { Loader2 } from 'lucide-react'
 
 export default function AuthCallbackPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { setTokensFromSSO } = useAuthStore()
   const [error, setError] = useState(null)
+  // useRef prevents the effect running twice in React Strict Mode
+  const handled = useRef(false)
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search)
+    if (handled.current) return
+    handled.current = true
+
+    // Read tokens from URL BEFORE any async work so they can't be lost
+    // if the component re-renders or App's init() races against us.
+    // window.location is used directly (not useLocation) so we get the
+    // raw URL that the backend redirected to, not any React-router rewrite.
+    const params = new URLSearchParams(window.location.search)
     const accessToken = params.get('access_token')
     const refreshToken = params.get('refresh_token')
     const errorParam = params.get('error')
 
-    // Check for error from backend (e.g., mfa_required_on_idp)
-    if (errorParam === 'mfa_required_on_idp') {
-      setError('mfa_required')
+    if (errorParam) {
+      if (errorParam === 'mfa_required_on_idp') {
+        setError('mfa_required')
+      } else {
+        setError(`Sign-in failed: ${errorParam}. Redirecting to login...`)
+        setTimeout(() => navigate('/login', { replace: true }), 3000)
+      }
       return
     }
 
-    if (accessToken && refreshToken) {
-      // Store tokens and redirect to dashboard
-      setTokensFromSSO(accessToken, refreshToken)
-        .then(() => {
-          navigate('/dashboard', { replace: true })
-        })
-        .catch((err) => {
-          console.error('SSO callback error:', err)
-          setError('Failed to complete sign-in. Please try again.')
-          setTimeout(() => navigate('/login', { replace: true }), 3000)
-        })
-    } else {
+    if (!accessToken || !refreshToken) {
       setError('Missing authentication tokens. Redirecting to login...')
       setTimeout(() => navigate('/login', { replace: true }), 2000)
+      return
     }
-  }, [location, navigate, setTokensFromSSO])
+
+    // Immediately stash tokens into sessionStorage BEFORE calling setTokensFromSSO.
+    // This means even if App's init() fires concurrently, it will find a valid
+    // token in sessionStorage and authenticate correctly instead of clearing state.
+    // setTokensFromSSO will overwrite these with the same values — no harm done.
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]))
+      const expiresIn = payload.exp
+        ? Math.max(60, payload.exp - Math.floor(Date.now() / 1000))
+        : 3600
+      const expiryTime = Date.now() + expiresIn * 1000
+      sessionStorage.setItem('access_token', accessToken)
+      sessionStorage.setItem('access_token_expiry', expiryTime.toString())
+      sessionStorage.setItem('refresh_token', refreshToken)
+    } catch {
+      // JWT decode failed — setTokensFromSSO will handle it with its own fallback
+    }
+
+    // Now complete the auth flow (fetches /auth/me, sets user in store)
+    setTokensFromSSO(accessToken, refreshToken)
+      .then(() => {
+        // Replace the callback URL (with tokens in it) so back button
+        // doesn't re-process the same tokens
+        navigate('/dashboard', { replace: true })
+      })
+      .catch((err) => {
+        console.error('SSO callback error:', err)
+        setError('Failed to complete sign-in. Please try again.')
+        setTimeout(() => navigate('/login', { replace: true }), 3000)
+      })
+  }, []) // Empty deps — intentional: run once on mount only
 
   if (error === 'mfa_required') {
     return (
