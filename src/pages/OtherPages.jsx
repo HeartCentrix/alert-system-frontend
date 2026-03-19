@@ -470,9 +470,12 @@ export function GroupsPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
   const [membersModal, setMembersModal] = useState(null)
+  const [page, setPage] = useState(1)
   const { user: currentUser } = useAuthStore()
   const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(currentUser?.role)
   const isAdminOrAbove = ['admin', 'super_admin'].includes(currentUser?.role)
+
+  const PAGE_SIZE = 10
 
   // Fetch all groups list - called every time user navigates to Groups page
   const { data: groupsData, isLoading } = useQuery({
@@ -481,7 +484,16 @@ export function GroupsPage() {
     refetchOnMount: 'always',
     staleTime: 0,
   })
-  const groups = groupsData || []
+  const allGroups = groupsData || []
+  
+  // Paginate groups
+  const totalPages = Math.ceil(allGroups.length / PAGE_SIZE) || 1
+  const currentPage = Math.min(page, totalPages)
+  const groups = allGroups.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  const handlePageChange = (newPage) => {
+    setPage(Math.max(1, Math.min(newPage, totalPages)))
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
@@ -606,6 +618,24 @@ export function GroupsPage() {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-4 sm:px-5 py-3 border-t border-surface-700/40 flex flex-col sm:flex-row items-center gap-3 sm:gap-0 justify-between">
+            <span className="text-xs text-slate-500 text-center sm:text-left">
+              Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, allGroups.length)} of {allGroups.length}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="btn-ghost py-1 px-2">
+                <ChevronLeft size={14} /> <span className="hidden xs:inline">Previous</span>
+              </button>
+              <span className="text-sm text-slate-400 px-2">{currentPage} / {totalPages}</span>
+              <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="btn-ghost py-1 px-2">
+                <span className="hidden xs:inline">Next</span> <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => { qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); }} />}
       {membersModal && (
@@ -974,11 +1004,23 @@ export function LocationsPage() {
 export function TemplatesPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
+  
   const { data: templatesData, isLoading } = useQuery({
     queryKey: ['templates'],
     queryFn: () => templatesAPI.list().then(r => r.data),
   })
-  const templates = templatesData || []
+  const allTemplates = templatesData || []
+  
+  // Paginate templates (grid layout - 3 columns)
+  const totalPages = Math.ceil(allTemplates.length / PAGE_SIZE) || 1
+  const currentPage = Math.min(page, totalPages)
+  const templates = allTemplates.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  const handlePageChange = (newPage) => {
+    setPage(Math.max(1, Math.min(newPage, totalPages)))
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (id) => templatesAPI.delete(id),
@@ -1103,6 +1145,25 @@ export function TemplatesPage() {
           </div>
         ))}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="card px-5 py-3 flex items-center justify-between">
+          <span className="text-xs text-slate-500">
+            Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, allTemplates.length)} of {allTemplates.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="btn-ghost py-1 px-2">
+              <ChevronLeft size={14} /> <span className="hidden xs:inline">Previous</span>
+            </button>
+            <span className="text-sm text-slate-400 px-2">{currentPage} / {totalPages}</span>
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="btn-ghost py-1 px-2">
+              <span className="hidden xs:inline">Next</span> <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {modal && <TemplateModal template={modal === 'create' ? null : modal} onClose={() => setModal(null)} />}
     </div>
   )
@@ -1115,26 +1176,42 @@ export function IncidentsPage() {
   const [modal, setModal] = useState(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'all')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
   const isVisible = useIsDocumentVisible()
   const { data: incidentsData, isLoading } = useQuery({
     queryKey: ['incidents'],
     queryFn: () => incidentsAPI.list().then(r => r.data),
     refetchInterval: isVisible ? 30000 : false,
   })
-  const incidents = incidentsData || []
+  const allIncidents = incidentsData || []
 
   // Filter incidents based on selected tab
-  const filteredIncidents = statusFilter === 'all' 
-    ? incidents 
-    : incidents.filter(i => i.status === statusFilter)
+  const filteredIncidents = statusFilter === 'all'
+    ? allIncidents
+    : allIncidents.filter(i => i.status === statusFilter)
+
+  // Paginate filtered incidents
+  const totalPages = Math.ceil(filteredIncidents.length / PAGE_SIZE) || 1
+  const currentPage = Math.min(page, totalPages)
+  const paginatedIncidents = filteredIncidents.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  const handlePageChange = (newPage) => {
+    setPage(Math.max(1, Math.min(newPage, totalPages)))
+  }
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setPage(1)
+  }, [statusFilter])
 
   // Count by status
   const counts = {
-    all: incidents.length,
-    active: incidents.filter(i => i.status === 'active').length,
-    monitoring: incidents.filter(i => i.status === 'monitoring').length,
-    resolved: incidents.filter(i => i.status === 'resolved').length,
-    cancelled: incidents.filter(i => i.status === 'cancelled').length,
+    all: allIncidents.length,
+    active: allIncidents.filter(i => i.status === 'active').length,
+    monitoring: allIncidents.filter(i => i.status === 'monitoring').length,
+    resolved: allIncidents.filter(i => i.status === 'resolved').length,
+    cancelled: allIncidents.filter(i => i.status === 'cancelled').length,
   }
 
   // Sync status filter with URL params
@@ -1279,7 +1356,7 @@ export function IncidentsPage() {
                 {statusFilter === 'all' ? 'No incidents' : `No ${statusFilter} incidents`}
               </td></tr>
             )}
-            {filteredIncidents.map(inc => (
+            {paginatedIncidents.map(inc => (
               <tr
                 key={inc.id}
                 className={cn(
@@ -1317,6 +1394,24 @@ export function IncidentsPage() {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-4 sm:px-5 py-3 border-t border-surface-700/40 flex flex-col sm:flex-row items-center gap-3 sm:gap-0 justify-between">
+            <span className="text-xs text-slate-500 text-center sm:text-left">
+              Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, filteredIncidents.length)} of {filteredIncidents.length}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="btn-ghost py-1 px-2">
+                <ChevronLeft size={14} /> <span className="hidden xs:inline">Previous</span>
+              </button>
+              <span className="text-sm text-slate-400 px-2">{currentPage} / {totalPages}</span>
+              <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="btn-ghost py-1 px-2">
+                <span className="hidden xs:inline">Next</span> <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       {modal && <IncidentModal incident={modal === 'create' ? null : modal} onClose={() => setModal(null)} />}
     </div>

@@ -386,14 +386,16 @@ function Step4({ form }) {
       {/* Slack/Teams webhook */}
       {selected.includes('slack') && (
         <div>
-          <label className="label">Slack Webhook URL</label>
-          <input {...form.register('slack_webhook_url')} className="input font-mono text-xs" placeholder="https://hooks.slack.com/services/..." />
+          <label className="label">Slack Webhook URL <span className="text-danger-400">*</span></label>
+          <input {...form.register('slack_webhook_url', { required: 'Slack webhook URL is required' })} className="input font-mono text-xs" placeholder="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXX" />
+          <p className="text-xs text-slate-500 mt-1">Create an Incoming Webhook in your Slack workspace</p>
         </div>
       )}
       {selected.includes('teams') && (
         <div>
-          <label className="label">Teams Webhook URL</label>
-          <input {...form.register('teams_webhook_url')} className="input font-mono text-xs" placeholder="https://outlook.office.com/webhook/..." />
+          <label className="label">Teams Webhook URL <span className="text-danger-400">*</span></label>
+          <input {...form.register('teams_webhook_url', { required: 'Teams webhook URL is required' })} className="input font-mono text-xs" placeholder="https://outlook.office.com/webhook/..." />
+          <p className="text-xs text-slate-500 mt-1">Create an Incoming Webhook in your Teams channel</p>
         </div>
       )}
 
@@ -551,7 +553,7 @@ export default function NewNotificationPage() {
   const watched = form.watch([
     'incident_type', 'incident_id', 'title', 'message',
     'target_all', 'target_group_ids', 'target_user_ids',
-    'channels',
+    'channels', 'slack_webhook_url', 'teams_webhook_url',
   ])
 
   const canProceed = () => {
@@ -560,7 +562,13 @@ export default function NewNotificationPage() {
     if (step === 0) return (!!v.incident_type || !!v.incident_id) && !!v.title
     if (step === 1) return !!v.message
     if (step === 2) return v.target_all || (v.target_group_ids?.length > 0) || (v.target_user_ids?.length > 0)
-    if (step === 3) return v.channels?.length > 0
+    if (step === 3) {
+      if (v.channels?.length === 0) return false
+      // Validate webhook URLs if Slack/Teams channels are selected
+      if (v.channels.includes('slack') && !v.slack_webhook_url) return false
+      if (v.channels.includes('teams') && !v.teams_webhook_url) return false
+      return true
+    }
     return true
   }
 
