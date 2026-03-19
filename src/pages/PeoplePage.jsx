@@ -7,6 +7,7 @@ import { getInitials, cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import useAuthStore from '@/store/authStore'
 import ModalPortal from '@/components/ui/ModalPortal'
+import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 const ROLES = ['viewer', 'manager', 'admin', 'super_admin']
 
@@ -28,15 +29,21 @@ function generateTempPassword() {
 }
 
 // Clean form data by converting empty strings to null and removing empty location_id
-function cleanUserData(data) {
+// Also removes 'role' field for self-edits to avoid permission errors
+function cleanUserData(data, isSelfEdit) {
   const cleaned = { ...data }
   const optionalFields = ['phone', 'department', 'title', 'employee_id']
-  
+
   optionalFields.forEach(field => {
     if (!cleaned[field]) delete cleaned[field]
   })
 
   if (!cleaned.location_id) delete cleaned.location_id
+  
+  // Remove role field for self-edits to avoid "Only admins can change user roles" error
+  if (isSelfEdit) {
+    delete cleaned.role
+  }
 
   return cleaned
 }
@@ -147,7 +154,9 @@ function UserModal({ user, onClose, onSaved }) {
   const onSubmit = async (data) => {
     setLoading(true)
     try {
-      const cleanedData = cleanUserData(data)
+      // Check if user is editing their own profile
+      const isSelfEdit = user?.id && user.id === currentUser?.id
+      const cleanedData = cleanUserData(data, isSelfEdit)
 
       if (user?.id) {
         await usersAPI.update(user.id, cleanedData)
@@ -470,9 +479,9 @@ function getRoleBadgeClass(role) {
   return roleClasses[role] || 'badge-gray'
 }
 
-// Get status badge class based on active state
-function getStatusBadgeClass(isActive) {
-  return isActive ? 'badge-green' : 'badge-red'
+// Get status badge class based on online state
+function getStatusBadgeClass(isOnline) {
+  return isOnline ? 'badge-green' : 'badge-red'
 }
 
 // Get button className based on user state
@@ -544,8 +553,8 @@ function UserTableRow({ user, currentUser, isSelected, isDeleting, isAdmin, onTo
         </span>
       </td>
       <td className="px-5 py-3.5">
-        <span className={getStatusBadgeClass(user.is_active)}>
-          {user.is_active ? 'Active' : 'Inactive'}
+        <span className={getStatusBadgeClass(user.is_online)}>
+          {user.is_online ? 'Active' : 'Inactive'}
         </span>
       </td>
       <td className="px-5 py-3.5">
@@ -584,6 +593,9 @@ export default function PeoplePage() {
   const fileRef = useRef()
   const [importing, setImporting] = useState(false)
 
+  // Check if page is visible to enable/disable auto-refresh
+  const isVisible = useIsDocumentVisible()
+
   // Debounce search input to avoid excessive API calls
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -592,14 +604,14 @@ export default function PeoplePage() {
     }, 300)
     return () => clearTimeout(timer)
   }, [searchInput])
-  
+
   const currentUser = useAuthStore(state => state.user)
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['users', page, search],
     queryFn: () => usersAPI.list({ page, page_size: 20, search: search || undefined }).then(r => r.data),
-    refetchInterval: 30000, // Refresh every 30 seconds to show real-time online status
+    refetchInterval: isVisible ? 10000 : false, // Refresh every 10s when visible for real-time status
     refetchIntervalInBackground: true, // Also refresh when tab is in background
   })
 

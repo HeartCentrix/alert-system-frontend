@@ -60,7 +60,7 @@ api.interceptors.response.use(
     // Handle CSRF errors
     if (err.response?.status === 403 && err.response?.data?.detail?.includes('CSRF')) {
       window.location.reload()
-      return Promise.reject(err)
+      throw err
     }
 
     // Skip token refresh for auth endpoints
@@ -71,7 +71,7 @@ api.interceptors.response.use(
       original?.url?.includes('/auth/me') ||
       original?.url?.includes('/auth/refresh')
 
-    if (isAuthEndpoint) return Promise.reject(err)
+    if (isAuthEndpoint) throw err
 
     // Handle 401 or 403 "Not authenticated"
     const isAuthFailure =
@@ -79,7 +79,7 @@ api.interceptors.response.use(
       (err.response?.status === 403 && err.response?.data?.detail === 'Not authenticated')
 
     if (!isAuthFailure || original?._retry === true) {
-      return Promise.reject(err)
+      throw err
     }
 
     original._retry = true
@@ -92,8 +92,10 @@ api.interceptors.response.use(
           original.headers.Authorization = `Bearer ${tokens.access_token}`
           return api(original)
         }
-      } catch { /* fall through to reject */ }
-      return Promise.reject(err)
+      } catch {
+        // Fall through to reject
+      }
+      throw err
     }
 
     // Start token refresh
@@ -112,10 +114,10 @@ api.interceptors.response.use(
         return api.request(retryConfig)
       }
     } catch (refreshErr) {
-      return Promise.reject(refreshErr)
+      throw refreshErr
     }
 
-    return Promise.reject(err)
+    throw err
   }
 )
 
