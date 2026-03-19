@@ -47,6 +47,65 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// ── Response interceptor helpers ─────────────────────────────────────────────
+
+function isCsrfError(err) {
+  return err.response?.status === 403 && err.response?.data?.detail?.includes('CSRF')
+}
+
+function isAuthEndpointUrl(url) {
+  const authPaths = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/auth/me', '/auth/refresh']
+  return authPaths.some(path => url?.includes(path))
+}
+
+function isAuthFailureStatus(err) {
+  return (
+    err.response?.status === 401 ||
+    (err.response?.status === 403 && err.response?.data?.detail === 'Not authenticated')
+  )
+}
+
+function handleExpiredSession() {
+  const currentPath = globalThis.location.pathname
+  const isPublicPage =
+    currentPath === '/login' ||
+    currentPath === '/forgot-password' ||
+    currentPath === '/reset-password' ||
+    currentPath.startsWith('/notifications/') ||
+    currentPath === '/responded'
+
+  _getAuthStore?.()?.clearSession?.()
+  if (!isPublicPage) {
+    globalThis.location.href = '/#/login'
+  }
+}
+
+async function executeTokenRefresh() {
+  const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
+
+  const { data } = await axios.post(
+    `${API_BASE}/auth/refresh`,
+    refreshToken ? { refresh_token: refreshToken } : {},
+    { withCredentials: true }
+  )
+
+  _getAuthStore?.()?.setAccessToken?.(data.access_token)
+  if (data.refresh_token) {
+    sessionStorage.setItem('refresh_token', data.refresh_token)
+    _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
+  }
+
+  return { access_token: data.access_token, refresh_token: data.refresh_token }
+}
+
+async function retryWithNewToken(original, tokens) {
+  const retryConfig = {
+    ...original,
+    headers: { ...original.headers, Authorization: `Bearer ${tokens.access_token}` },
+  }
+  return api.request(retryConfig)
+}
+
 // ── Response interceptor ─────────────────────────────────────────────────────
 api.interceptors.response.use(
   (res) => {
