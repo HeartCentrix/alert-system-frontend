@@ -60,7 +60,7 @@ export default function DashboardPage() {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => dashboardAPI.stats().then(r => r.data),
-    refetchInterval: isVisible ? 10000 : false, // Refresh every 10s for real-time online status
+    refetchInterval: isVisible ? 5000 : false, // Refresh every 5s for real-time updates
   })
 
   const { data: mapData } = useQuery({
@@ -145,13 +145,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Leaflet Map */}
-            {mapData?.locations?.length === 0 ? (
-              <div className="flex items-center justify-center h-64 text-slate-500 text-sm rounded-lg bg-surface-800/30">
-                No locations configured yet
-              </div>
-            ) : (
-              <LocationMap locations={mapData?.locations || []} height={280} onLocationClick={(id) => navigate(`/locations/${id}/members`)} />
-            )}
+            <LocationMap locations={mapData?.locations || []} height={280} onLocationClick={(id) => navigate(`/locations/${id}/members`)} />
 
             {/* Summary row */}
             <div className="mt-4 pt-4 border-t border-surface-700/40 flex flex-wrap gap-4 sm:gap-6">

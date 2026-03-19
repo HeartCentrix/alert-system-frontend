@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 
@@ -10,15 +10,12 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-// Custom blue pin icon
-// Sanitize count to prevent XSS - only allow safe numeric values
 const createIcon = (count) => {
-  // Ensure count is a safe non-negative integer
   const safeCount = typeof count === 'number' && Number.isFinite(count) && count >= 0
     ? Math.floor(count)
     : 0
   const displayCount = safeCount > 99 ? '99+' : String(safeCount)
-  
+
   return L.divIcon({
     className: '',
     html: `
@@ -45,11 +42,10 @@ const createIcon = (count) => {
     `,
     iconSize: [32, 32],
     iconAnchor: [16, 32],
-    popupAnchor: [0, -34],
+    popupAnchor: [0, -42],
   })
 }
 
-// Auto-fit map bounds to markers
 function FitBounds({ locations }) {
   const map = useMap()
   useEffect(() => {
@@ -66,19 +62,102 @@ function FitBounds({ locations }) {
   return null
 }
 
+function LocationMarker({ loc, onLocationClick }) {
+  const markerRef = useRef(null)
+  const closeTimer = useRef(null)
+
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => {
+      markerRef.current?.closePopup()
+    }, 150)
+  }
+
+  useEffect(() => () => cancelClose(), [])
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={[loc.latitude, loc.longitude]}
+      icon={createIcon(loc.user_count || 0)}
+      eventHandlers={{
+        mouseover() {
+          cancelClose()
+          markerRef.current?.openPopup()
+        },
+        mouseout() {
+          scheduleClose()
+        },
+        click() {
+          if (onLocationClick) onLocationClick(loc.id)
+        },
+      }}
+    >
+      <Popup
+        closeButton={false}
+        autoPan={false}
+        eventHandlers={{
+          mouseover() { cancelClose() },
+          mouseout()  { scheduleClose() },
+        }}
+      >
+        <div style={{
+          background: '#1e293b',
+          color: '#f1f5f9',
+          padding: '10px 14px',
+          borderRadius: '8px',
+          minWidth: '180px',
+          fontSize: '13px',
+          lineHeight: '1.5',
+        }}>
+          {/* Location Name */}
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: '#f1f5f9' }}>
+            {loc.name}
+          </div>
+
+          {/* Members */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#64748b', fontSize: 12 }}>Members</span>
+            <span style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>
+              {loc.user_count ?? 0}
+            </span>
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  )
+}
+
 export default function LocationMap({ locations = [], height = 320, onLocationClick }) {
   const validLocations = locations.filter(l => l.latitude && l.longitude)
 
-  // Default center: USA
   const defaultCenter = [39.5, -98.35]
   const defaultZoom = 4
 
   return (
-    <div style={{ height, borderRadius: '0.5rem', overflow: 'hidden' }}>
+    <div style={{
+      height,
+      borderRadius: '0.5rem',
+      overflow: 'visible',
+      position: 'relative',
+      zIndex: 0,
+    }}>
       <MapContainer
         center={defaultCenter}
         zoom={defaultZoom}
-        style={{ height: '100%', width: '100%', background: '#0f172a' }}
+        style={{
+          height: '100%',
+          width: '100%',
+          background: '#0f172a',
+          borderRadius: '0.5rem',
+        }}
         zoomControl={true}
         attributionControl={false}
       >
@@ -88,36 +167,11 @@ export default function LocationMap({ locations = [], height = 320, onLocationCl
         />
         <FitBounds locations={validLocations} />
         {validLocations.map(loc => (
-          <Marker
+          <LocationMarker
             key={loc.id}
-            position={[loc.latitude, loc.longitude]}
-            icon={createIcon(loc.user_count || 0)}
-            eventHandlers={onLocationClick ? {
-              click: () => onLocationClick(loc.id),
-            } : {}}
-          >
-            <Popup>
-              <div style={{
-                background: '#1e293b',
-                color: '#f1f5f9',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                minWidth: '160px',
-                fontSize: '13px'
-              }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>{loc.name}</div>
-                <div style={{ color: '#94a3b8', fontSize: 12 }}>{loc.city}, {loc.state}</div>
-                <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
-                  <span
-                    style={{ color: '#60a5fa', fontWeight: 600, cursor: onLocationClick ? 'pointer' : 'default' }}
-                    onClick={(e) => { if (onLocationClick) { e.stopPropagation(); onLocationClick(loc.id) } }}
-                  >
-                    {loc.user_count || 0} people →
-                  </span>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
+            loc={loc}
+            onLocationClick={onLocationClick}
+          />
         ))}
       </MapContainer>
     </div>
