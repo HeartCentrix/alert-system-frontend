@@ -485,7 +485,7 @@ export function GroupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => groupsAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); toast.success('Group deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); toast.success('Group deleted') },
     onError: (error) => {
       const errorMessage = error.response?.data?.detail || 
                           (typeof error.response?.data?.detail === 'object' 
@@ -607,12 +607,12 @@ export function GroupsPage() {
           </tbody>
         </table>
       </div>
-      {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries({ queryKey: ['groups'] })} />}
+      {modal && <GroupModal group={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => { qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); }} />}
       {membersModal && (
         <GroupMembersModal
           group={membersModal}
           onClose={() => setMembersModal(null)}
-          onSaved={() => qc.invalidateQueries({ queryKey: ['groups'] })}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); }}
         />
       )}
     </div>
@@ -878,7 +878,7 @@ export function LocationsPage() {
   const locations = locationsData || []
   const deleteMutation = useMutation({
     mutationFn: (id) => locationsAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['locations'] }); toast.success('Location deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['locations'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); toast.success('Location deleted') },
     onError: (error) => {
       const errorMessage = error.response?.data?.detail || 
                           (typeof error.response?.data?.detail === 'object' 
@@ -964,7 +964,7 @@ export function LocationsPage() {
           </div>
         ))}
       </div>
-      {modal && <LocationModal location={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => qc.invalidateQueries({ queryKey: ['locations'] })} />}
+      {modal && <LocationModal location={modal === 'create' ? null : modal} onClose={() => setModal(null)} onSaved={() => { qc.invalidateQueries({ queryKey: ['locations'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); }} />}
     </div>
   )
 }

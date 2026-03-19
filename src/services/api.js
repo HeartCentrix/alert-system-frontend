@@ -47,6 +47,65 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// ── Response interceptor helpers ─────────────────────────────────────────────
+
+function isCsrfError(err) {
+  return err.response?.status === 403 && err.response?.data?.detail?.includes('CSRF')
+}
+
+function isAuthEndpointUrl(url) {
+  const authPaths = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/auth/me', '/auth/refresh']
+  return authPaths.some(path => url?.includes(path))
+}
+
+function isAuthFailureStatus(err) {
+  return (
+    err.response?.status === 401 ||
+    (err.response?.status === 403 && err.response?.data?.detail === 'Not authenticated')
+  )
+}
+
+function handleExpiredSession() {
+  const currentPath = globalThis.location.pathname
+  const isPublicPage =
+    currentPath === '/login' ||
+    currentPath === '/forgot-password' ||
+    currentPath === '/reset-password' ||
+    currentPath.startsWith('/notifications/') ||
+    currentPath === '/responded'
+
+  _getAuthStore?.()?.clearSession?.()
+  if (!isPublicPage) {
+    globalThis.location.href = '/#/login'
+  }
+}
+
+async function executeTokenRefresh() {
+  const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
+
+  const { data } = await axios.post(
+    `${API_BASE}/auth/refresh`,
+    refreshToken ? { refresh_token: refreshToken } : {},
+    { withCredentials: true }
+  )
+
+  _getAuthStore?.()?.setAccessToken?.(data.access_token)
+  if (data.refresh_token) {
+    sessionStorage.setItem('refresh_token', data.refresh_token)
+    _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
+  }
+
+  return { access_token: data.access_token, refresh_token: data.refresh_token }
+}
+
+async function retryWithNewToken(original, tokens) {
+  const retryConfig = {
+    ...original,
+    headers: { ...original.headers, Authorization: `Bearer ${tokens.access_token}` },
+  }
+  return api.request(retryConfig)
+}
+
 // ── Response interceptor ─────────────────────────────────────────────────────
 api.interceptors.response.use(
   (res) => {
@@ -57,102 +116,43 @@ api.interceptors.response.use(
   async (err) => {
     const original = err.config
 
-    if (
-      err.response?.status === 403 &&
-      err.response?.data?.detail?.includes('CSRF')
-    ) {
-      window.location.reload()
-      return Promise.reject(err)
+    if (isCsrfError(err)) {
+      globalThis.location.reload()
+      throw err
     }
 
-    const isAuthEndpoint =
-      original?.url?.includes('/auth/login') ||
-      original?.url?.includes('/auth/forgot-password') ||
-      original?.url?.includes('/auth/reset-password') ||
-      original?.url?.includes('/auth/me') ||
-      original?.url?.includes('/auth/refresh')
+    if (isAuthEndpointUrl(original?.url)) throw err
 
-    if (isAuthEndpoint) return Promise.reject(err)
+    if (!isAuthFailureStatus(err) || original?._retry === true) {
+      throw err
+    }
 
-    // Handle 401 or 403 "Not authenticated" (FastAPI HTTPBearer returns 403 when no Authorization header)
-    const isAuthFailure =
-      err.response?.status === 401 ||
-      (err.response?.status === 403 && err.response?.data?.detail === 'Not authenticated')
+    if (original) original._retry = true
 
-    if (isAuthFailure && original?._retry !== true) {
-      if (original) original._retry = true
-
-      if (refreshPromise) {
-        try {
-          const tokens = await refreshPromise
-          if (tokens) {
-            original.headers.Authorization = `Bearer ${tokens.access_token}`
-            return api(original)
-          }
-        } catch { /* fall through to reject */ }
-        return Promise.reject(err)
-      }
-
-      refreshPromise = (async () => {
-        try {
-          const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
-
-          const { data } = await axios.post(
-            `${API_BASE}/auth/refresh`,
-            refreshToken ? { refresh_token: refreshToken } : {},
-            { withCredentials: true }
-          )
-
-          _getAuthStore?.()?.setAccessToken?.(data.access_token)
-          if (data.refresh_token) {
-            sessionStorage.setItem('refresh_token', data.refresh_token)
-            _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
-          }
-
-          return { access_token: data.access_token, refresh_token: data.refresh_token }
-        } catch (refreshErr) {
-          // Refresh failed — session fully expired
-          // Only redirect if we're not on a public page
-          const currentPath = window.location.pathname
-          const isPublicPage =
-            currentPath === '/login' ||
-            currentPath === '/forgot-password' ||
-            currentPath === '/reset-password' ||
-            currentPath.startsWith('/notifications/') ||
-            currentPath === '/responded'
-
-          if (!isPublicPage) {
-            _getAuthStore?.()?.clearSession?.()
-            window.location.href = '/#/login'
-          } else {
-            // On public page - just clear session, don't redirect
-            _getAuthStore?.()?.clearSession?.()
-          }
-          throw refreshErr
-        } finally {
-          refreshPromise = null
-        }
-      })()
-
+    // Deduplicate concurrent refresh attempts
+    if (refreshPromise) {
       try {
         const tokens = await refreshPromise
-        if (tokens) {
-          // Manually set the Authorization header for the retry
-          const retryConfig = {
-            ...original,
-            headers: {
-              ...original.headers,
-              Authorization: `Bearer ${tokens.access_token}`
-            }
-          }
-          return api.request(retryConfig)
-        }
-      } catch (refreshErr) {
-        return Promise.reject(refreshErr)
-      }
+        if (tokens) return api(original)
+      } catch { /* fall through */ }
+      throw err
     }
 
-    return Promise.reject(err)
+    refreshPromise = executeTokenRefresh().catch((refreshErr) => {
+      handleExpiredSession()
+      throw refreshErr
+    }).finally(() => {
+      refreshPromise = null
+    })
+
+    try {
+      const tokens = await refreshPromise
+      if (tokens) return retryWithNewToken(original, tokens)
+    } catch (refreshErr) {
+      throw refreshErr
+    }
+
+    throw err
   }
 )
 

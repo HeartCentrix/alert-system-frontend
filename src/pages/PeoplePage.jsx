@@ -46,6 +46,53 @@ function cleanUserData(data) {
   return cleaned
 }
 
+// ── UserModal helpers ────────────────────────────────────────────────────────
+
+function buildFieldErrorMessage(e) {
+  const field = e.loc?.[1] || e.loc?.[0] || 'field'
+  const rawMsg = e.msg || ''
+  let friendlyMsg = rawMsg
+
+  if (field === 'email' && (rawMsg.includes('email') || rawMsg.includes('@'))) {
+    friendlyMsg = 'Enter a valid email address (e.g., name@company.com)'
+  } else if (field === 'phone' && rawMsg.includes('pattern')) {
+    friendlyMsg = 'Phone can only contain numbers, spaces, and symbols like +, -, (, )'
+  } else if (field === 'password' && rawMsg.includes('8')) {
+    friendlyMsg = 'Password must be at least 8 characters'
+  } else if ((field === 'first_name' || field === 'last_name')) {
+    if (rawMsg.includes('required') || rawMsg.includes('length')) {
+      friendlyMsg = 'This field is required'
+    } else if (rawMsg.includes('pattern')) {
+      friendlyMsg = 'Use only letters, spaces, hyphens, and apostrophes'
+    }
+  }
+
+  return `${field.replace('_', ' ')}: ${friendlyMsg}`
+}
+
+function parseUserApiError(error) {
+  if (error.response?.status === 401) {
+    return 'Session expired. Please log in again.'
+  }
+  if (error.response?.status === 403) {
+    return 'You do not have permission to perform this action.'
+  }
+  if (error.response?.status === 422) {
+    const details = error.response?.data?.detail
+    if (Array.isArray(details)) {
+      return details.map(buildFieldErrorMessage).join(', ')
+    }
+    if (details) {
+      return typeof details === 'object' ? details.message : details
+    }
+  }
+  if (error.response?.data?.detail) {
+    const detail = error.response.data.detail
+    return typeof detail === 'object' ? detail.message : detail
+  }
+  return error.message || 'Error saving user'
+}
+
 function UserModal({ user, onClose, onSaved }) {
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
     defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
@@ -99,11 +146,35 @@ function UserModal({ user, onClose, onSaved }) {
     // Don't crash the component - just continue with empty locations list
   }
 
+  const handleUpdate = async (data, cleanedData) => {
+    await usersAPI.update(user.id, cleanedData)
+    await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+    toast.success('User updated')
+    onSaved()
+    onClose()
+  }
+
+  const handleCreate = async (data, cleanedData) => {
+    const password = data.password || generateTempPassword()
+    console.log('Creating user with data:', { ...cleanedData, password })
+    await usersAPI.create({ ...cleanedData, password })
+    await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+
+    if (!data.password) {
+      setGeneratedPassword(password)
+      toast.success('User created! Copy the password below')
+      reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+    } else {
+      toast.success('User created')
+      onSaved()
+      onClose()
+    }
+  }
+
   const onSubmit = async (data) => {
     setLoading(true)
     try {
       console.log('Form data:', data)
-      // Clean the data to remove empty strings
       const cleanedData = cleanUserData(data)
       console.log('Cleaned data:', cleanedData)
 
@@ -116,96 +187,11 @@ function UserModal({ user, onClose, onSaved }) {
         onSaved()
         onClose()
       } else {
-        const password = data.password || generateTempPassword()
-        console.log('Creating user with data:', { ...cleanedData, password })
-        await usersAPI.create({ ...cleanedData, password })
-
-        // Invalidate and refetch filter options to include new department/title
-        await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
-
-        if (!data.password) {
-          setGeneratedPassword(password)
-          toast.success('User created! Copy the password below')
-          // Reset form to prevent re-submission
-          reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
-        } else {
-          toast.success('User created')
-          onSaved()
-          onClose()
-        }
+        await handleCreate(data, cleanedData)
       }
     } catch (error) {
       console.error('Error saving user:', error)
-
-      // Handle different error types
-      let errorMessage = 'Error saving user'
-
-      if (error.response?.status === 401) {
-        errorMessage = 'Session expired. Please log in again.'
-        // Auth interceptor in api.js handles session expiry globally.
-        // The window.location redirect happens there automatically.
-      } else if (error.response?.status === 403) {
-        errorMessage = 'You do not have permission to perform this action.'
-      } else if (error.response?.status === 422) {
-        // Validation error - extract field-specific errors
-        const errors = error.response?.data?.detail
-        if (Array.isArray(errors)) {
-          // Format: [{loc: ['body', 'email'], msg: '...', type: '...'}]
-          const fieldErrors = errors.map(e => {
-            const field = e.loc?.[1] || e.loc?.[0] || 'field'
-            const rawMsg = e.msg || ''
-            
-            // Convert technical messages to human-readable
-            let friendlyMsg = rawMsg
-            
-            // Email validation messages
-            if (field === 'email') {
-              if (rawMsg.includes('email') || rawMsg.includes('@')) {
-                friendlyMsg = 'Enter a valid email address (e.g., name@company.com)'
-              }
-            }
-            
-            // Phone validation messages
-            if (field === 'phone') {
-              if (rawMsg.includes('pattern')) {
-                friendlyMsg = 'Phone can only contain numbers, spaces, and symbols like +, -, (, )'
-              }
-            }
-            
-            if (field === 'password') {
-              if (rawMsg.includes('8')) {
-                friendlyMsg = 'Password must be at least 8 characters'
-              }
-            }
-            
-            // Name validation messages
-            if (field === 'first_name' || field === 'last_name') {
-              if (rawMsg.includes('required') || rawMsg.includes('length')) {
-                friendlyMsg = 'This field is required'
-              }
-              if (rawMsg.includes('pattern')) {
-                friendlyMsg = 'Use only letters, spaces, hyphens, and apostrophes'
-              }
-            }
-            
-            return `${field.replace('_', ' ')}: ${friendlyMsg}`
-          })
-          errorMessage = fieldErrors.join(', ')
-        } else if (error.response?.data?.detail) {
-          errorMessage = typeof error.response.data.detail === 'object'
-            ? error.response.data.detail.message
-            : error.response.data.detail
-        }
-      } else if (error.response?.data?.detail) {
-        errorMessage = typeof error.response.data.detail === 'object'
-          ? error.response.data.detail.message
-          : error.response.data.detail
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-      
-      toast.error(errorMessage)
-      // Keep modal open on error so user can fix issues
+      toast.error(parseUserApiError(error))
     } finally {
       setLoading(false)
     }
@@ -492,6 +478,97 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
   )
 }
 
+// ── UserTableRow sub-component (extracted to reduce PeoplePage complexity) ────
+
+function getRoleBadgeClass(role) {
+  if (role === 'super_admin') return 'badge-red'
+  if (role === 'admin') return 'badge-orange'
+  if (role === 'manager') return 'badge-blue'
+  return 'badge-gray'
+}
+
+function UserTableRow({ u, isAdmin, currentUser, selectedUsers, isDeleting, onEdit, onDelete, onToggleSelect }) {
+  const isSelected = selectedUsers.has(u.id)
+  const isSelf = u.id === currentUser?.id
+
+  return (
+    <tr className={cn('table-row', isSelected ? 'bg-primary-900/20' : '')}>
+      {isAdmin && (
+        <td className="px-4 py-3.5">
+          <button
+            onClick={() => onToggleSelect(u.id)}
+            disabled={isSelf}
+            className={cn(
+              'hover:text-slate-300 transition-colors',
+              isSelf ? 'text-slate-700 cursor-not-allowed' : isSelected ? 'text-primary-400' : 'text-slate-500'
+            )}
+            title={isSelf ? 'You cannot delete yourself' : isSelected ? 'Deselect' : 'Select'}
+          >
+            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+          </button>
+        </td>
+      )}
+      <td className="px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
+            {getInitials(u.full_name)}
+          </div>
+          <div>
+            <div className="text-sm font-medium text-slate-200">{u.full_name}</div>
+            <div className="text-xs text-slate-500">{u.employee_id && `#${u.employee_id}`}</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-5 py-3.5">
+        <div className="text-xs text-slate-400">{u.email}</div>
+        {u.phone && <div className="text-xs text-slate-500 font-mono">{u.phone}</div>}
+      </td>
+      <td className="px-5 py-3.5 text-sm text-slate-400">{u.department || '—'}</td>
+      <td className="px-5 py-3.5">
+        <span className={cn('badge', getRoleBadgeClass(u.role))}>
+          {u.role?.replaceAll('_', ' ')}
+        </span>
+      </td>
+      <td className="px-5 py-3.5">
+        <span className={u.is_active ? 'badge-green' : 'badge-red'}>
+          {u.is_active ? 'Active' : 'Inactive'}
+        </span>
+      </td>
+      <td className="px-5 py-3.5">
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => onEdit(u)}
+            className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+            disabled={isDeleting(u.id)}
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={() => onDelete(u)}
+            disabled={isSelf || isDeleting(u.id)}
+            className={cn(
+              'p-1.5 transition-colors',
+              isSelf || isDeleting(u.id)
+                ? 'text-slate-700 cursor-not-allowed'
+                : 'text-slate-500 hover:text-danger-400'
+            )}
+            title={isSelf ? 'You cannot delete yourself' : isDeleting(u.id) ? 'Deleting...' : 'Delete'}
+          >
+            {isDeleting(u.id) ? (
+              <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <Trash2 size={14} />
+            )}
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 export default function PeoplePage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
@@ -524,7 +601,7 @@ export default function PeoplePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => usersAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); toast.success('User deleted') },
     onError: (error) => {
       const errorMessage = error.response?.data?.detail || 
                           (typeof error.response?.data?.detail === 'object' 
@@ -538,6 +615,8 @@ export default function PeoplePage() {
     mutationFn: (userIds) => usersAPI.bulkDelete(userIds),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      qc.invalidateQueries({ queryKey: ['map-data'] })
       setSelectedUsers(new Set())
       setBulkDeleteModal(false)
 
@@ -597,8 +676,10 @@ export default function PeoplePage() {
       }
 
       qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      qc.invalidateQueries({ queryKey: ['map-data'] })
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 
+      const errorMessage = error.response?.data?.detail ||
                           (typeof error.response?.data?.detail === 'object' 
                             ? error.response.data.detail.message 
                             : 'Import failed')
@@ -748,95 +829,19 @@ export default function PeoplePage() {
             {!isLoading && users.length === 0 && (
               <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12 text-slate-500 text-sm">No people found</td></tr>
             )}
-            {users.map(u => {
-              const isSelected = selectedUsers.has(u.id)
-              const isSelf = u.id === currentUser?.id
-              
-              return (
-                <tr key={u.id} className={cn(
-                  "table-row",
-                  isSelected ? "bg-primary-900/20" : ""
-                )}>
-                  {isAdmin && (
-                    <td className="px-4 py-3.5">
-                      <button
-                        onClick={() => toggleSelectUser(u.id)}
-                        disabled={isSelf}
-                        className={cn(
-                          "hover:text-slate-300 transition-colors",
-                          isSelf ? "text-slate-700 cursor-not-allowed" : isSelected ? "text-primary-400" : "text-slate-500"
-                        )}
-                        title={isSelf ? "You cannot delete yourself" : isSelected ? "Deselect" : "Select"}
-                      >
-                        {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                      </button>
-                    </td>
-                  )}
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
-                        {getInitials(u.full_name)}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-200">{u.full_name}</div>
-                        <div className="text-xs text-slate-500">{u.employee_id && `#${u.employee_id}`}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="text-xs text-slate-400">{u.email}</div>
-                    {u.phone && <div className="text-xs text-slate-500 font-mono">{u.phone}</div>}
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-slate-400">{u.department || '—'}</td>
-                  <td className="px-5 py-3.5">
-                    <span className={cn(
-                      'badge',
-                      u.role === 'super_admin' ? 'badge-red' :
-                      u.role === 'admin' ? 'badge-orange' :
-                      u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                    )}>{u.role?.replaceAll('_', ' ')}</span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span className={u.is_active ? 'badge-green' : 'badge-red'}>
-                      {u.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setModal(u)}
-                        className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-                        disabled={isDeleting(u.id)}
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id)
-                        }}
-                        disabled={isSelf || isDeleting(u.id)}
-                        className={cn(
-                          "p-1.5 transition-colors",
-                          isSelf || isDeleting(u.id)
-                            ? "text-slate-700 cursor-not-allowed"
-                            : "text-slate-500 hover:text-danger-400"
-                        )}
-                        title={isSelf ? "You cannot delete yourself" : isDeleting(u.id) ? "Deleting..." : "Delete"}
-                      >
-                        {isDeleting(u.id) ? (
-                          <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+            {users.map(u => (
+              <UserTableRow
+                key={u.id}
+                u={u}
+                isAdmin={isAdmin}
+                currentUser={currentUser}
+                selectedUsers={selectedUsers}
+                isDeleting={isDeleting}
+                onEdit={(user) => setModal(user)}
+                onDelete={(user) => { if (confirm(`Delete ${user.full_name}?`)) deleteMutation.mutate(user.id) }}
+                onToggleSelect={toggleSelectUser}
+              />
+            ))}
           </tbody>
         </table>
         </div>
@@ -866,7 +871,7 @@ export default function PeoplePage() {
           onClose={() => {
             setModal(null)
           }}
-          onSaved={() => qc.invalidateQueries({ queryKey: ['users'] })}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); }}
         />
       )}
 
