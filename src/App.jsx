@@ -39,6 +39,10 @@ export default function App() {
   const geofenceUpdateIntervalRef = useRef(null)
 
   useEffect(() => {
+    // Skip init() on SSO callback — AuthCallbackPage handles its own auth.
+    // Running init() here races against setTokensFromSSO() and clears the
+    // session before URL tokens can be stored.
+    if (window.location.pathname === '/auth/callback') return
     init()
   }, [init])
 

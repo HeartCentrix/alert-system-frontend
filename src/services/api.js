@@ -32,10 +32,37 @@ function clearAuthData() {
 // ── Anti-forgery helper ─────────────────────────────────────────────────────
 let _csrfToken = null
 
+/**
+ * Get CSRF token from cookie with security validation
+ * 2026 STANDARD: Validate token format to prevent XSS via cookie injection
+ */
 function getCsrfToken() {
   if (_csrfToken) return _csrfToken
+  
   const match = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)
-  return match ? decodeURIComponent(match[1]) : null
+  if (!match) return null
+  
+  const rawToken = match[1]
+  
+  // SECURITY: Validate token format before decoding
+  // Only allow URL-safe base64 characters, alphanumerics, hyphen, underscore
+  if (!/^[A-Za-z0-9\-_]+$/.test(rawToken)) {
+    console.warn('[Security] Invalid CSRF token format - possible XSS attempt')
+    return null
+  }
+  
+  try {
+    const decodedToken = decodeURIComponent(rawToken)
+    // Double-check decoded token doesn't contain script tags or dangerous patterns
+    if (/<script|javascript:|on\w+=/i.test(decodedToken)) {
+      console.warn('[Security] CSRF token contains malicious content')
+      return null
+    }
+    return decodedToken
+  } catch (e) {
+    console.warn('[Security] CSRF token decode failed')
+    return null
+  }
 }
 
 const CSRF_METHODS = new Set(['post', 'put', 'patch', 'delete'])

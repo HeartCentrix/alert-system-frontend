@@ -263,10 +263,33 @@ const useAuthStore = create((set, get) => ({
   },
 
   setTokensFromSSO: async (accessToken, refreshToken) => {
-    // Store tokens
-    saveAccessToken(accessToken)
+    // Decode JWT to get expiry time from exp claim
+    let expiresIn = 3600 // Default 1 hour
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]))
+      if (payload.exp) {
+        // exp is Unix timestamp in seconds, convert to milliseconds from now
+        const expiryTimestamp = payload.exp * 1000
+        const now = Date.now()
+        expiresIn = Math.floor((expiryTimestamp - now) / 1000)
+        // Ensure positive value
+        if (expiresIn < 0) expiresIn = 0
+      }
+    } catch (e) {
+      console.warn('Could not decode JWT exp claim, using default expiresIn=3600')
+    }
+
+    // Store tokens with proper expiry
+    saveAccessToken(accessToken, expiresIn)
     saveRefreshToken(refreshToken)
-    set({ accessToken, refreshToken })
+    
+    // IMPORTANT: Set isInitializing: false to prevent race conditions
+    // React Strict Mode may trigger duplicate init() calls
+    set({ 
+      accessToken, 
+      refreshToken,
+      isInitializing: false
+    })
 
     // Fetch user profile using the new token
     try {
@@ -289,7 +312,22 @@ const useAuthStore = create((set, get) => ({
 
   ldapLogin: async (username, password) => {
     const { data } = await authAPI.ldapLogin(username, password)
-    saveAccessToken(data.access_token)
+    
+    // Decode JWT to get expiry time from exp claim
+    let expiresIn = 3600 // Default 1 hour
+    try {
+      const payload = JSON.parse(atob(data.access_token.split('.')[1]))
+      if (payload.exp) {
+        const expiryTimestamp = payload.exp * 1000
+        const now = Date.now()
+        expiresIn = Math.floor((expiryTimestamp - now) / 1000)
+        if (expiresIn < 0) expiresIn = 0
+      }
+    } catch (e) {
+      console.warn('Could not decode JWT exp claim, using default expiresIn=3600')
+    }
+    
+    saveAccessToken(data.access_token, expiresIn)
     if (data.refresh_token) saveRefreshToken(data.refresh_token)
     set({
       user: data.user,
@@ -313,9 +351,23 @@ const useAuthStore = create((set, get) => ({
 
     const { data } = await authAPI.verifyMFA(mfaChallengeToken, code)
 
+    // Decode JWT to get expiry time from exp claim
+    let expiresIn = 3600 // Default 1 hour
+    try {
+      const payload = JSON.parse(atob(data.access_token.split('.')[1]))
+      if (payload.exp) {
+        const expiryTimestamp = payload.exp * 1000
+        const now = Date.now()
+        expiresIn = Math.floor((expiryTimestamp - now) / 1000)
+        if (expiresIn < 0) expiresIn = 0
+      }
+    } catch (e) {
+      console.warn('Could not decode JWT exp claim, using default expiresIn=3600')
+    }
+
     if (data?.recovery_codes && data.recovery_codes.length > 0) {
       saveRefreshToken(data.refresh_token)
-      saveAccessToken(data.access_token)
+      saveAccessToken(data.access_token, expiresIn)
       set({
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
@@ -327,7 +379,7 @@ const useAuthStore = create((set, get) => ({
       })
     } else {
       saveRefreshToken(data.refresh_token)
-      saveAccessToken(data.access_token)
+      saveAccessToken(data.access_token, expiresIn)
       set({
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
@@ -349,8 +401,22 @@ const useAuthStore = create((set, get) => ({
 
     const { data } = await authAPI.verifyMFAWithRecoveryCode(token, recoveryCode)
 
+    // Decode JWT to get expiry time from exp claim
+    let expiresIn = 3600 // Default 1 hour
+    try {
+      const payload = JSON.parse(atob(data.access_token.split('.')[1]))
+      if (payload.exp) {
+        const expiryTimestamp = payload.exp * 1000
+        const now = Date.now()
+        expiresIn = Math.floor((expiryTimestamp - now) / 1000)
+        if (expiresIn < 0) expiresIn = 0
+      }
+    } catch (e) {
+      console.warn('Could not decode JWT exp claim, using default expiresIn=3600')
+    }
+
     saveRefreshToken(data.refresh_token)
-    saveAccessToken(data.access_token)
+    saveAccessToken(data.access_token, expiresIn)
     set({
       accessToken: data.access_token,
       refreshToken: data.refresh_token,

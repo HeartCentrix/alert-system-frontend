@@ -34,11 +34,23 @@ const ERROR_TYPE_MESSAGES = {
 
 /**
  * Extract field name from error location
+ * 2026 STANDARD: Sanitize field names to prevent prototype pollution
  */
 function extractFieldName(loc) {
   if (!Array.isArray(loc) || loc.length === 0) return 'Field'
   const fieldName = loc[loc.length - 1]
-  return fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
+  
+  // SECURITY: Ensure field name is a safe string
+  if (typeof fieldName !== 'string') return 'Field'
+  
+  // Prevent prototype pollution via __proto__, constructor, prototype
+  if (fieldName === '__proto__' || fieldName === 'constructor' || fieldName === 'prototype') {
+    return 'Field'
+  }
+  
+  // Sanitize: only allow alphanumeric, underscore, hyphen
+  const sanitized = fieldName.replace(/[^a-zA-Z0-9_-]/g, '_')
+  return sanitized.charAt(0).toUpperCase() + sanitized.slice(1)
 }
 
 /**

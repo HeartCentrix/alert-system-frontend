@@ -54,8 +54,13 @@ export default function CompanyLoginPage() {
       const detail = err.response?.data?.detail || err.message || 'Invalid credentials'
       let message = detail
 
-      if (typeof detail === 'object' && detail.message) {
-        message = detail.message
+      // Check for MFA setup required error
+      if (typeof detail === 'object') {
+        if (detail.code === 'mfa_setup_required') {
+          message = 'Your role requires two-factor authentication. Please contact your administrator to complete MFA setup for your account.'
+        } else if (detail.message) {
+          message = detail.message
+        }
       }
 
       toast.error(message)

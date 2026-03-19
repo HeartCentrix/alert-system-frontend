@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Shield, AlertCircle, CheckCircle2, Smartphone, X } from 'lucide-react'
 
 /**
@@ -12,6 +12,23 @@ export default function TFAChallengeStep({ onVerify, onCancel, onUseRecoveryCode
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [totpExpiry, setTotpExpiry] = useState(30)
+
+  // TOTP codes refresh every 30 seconds - show countdown to help users
+  useEffect(() => {
+    // Calculate initial remaining time
+    const updateExpiry = () => {
+      const remaining = 30 - (Math.floor(Date.now() / 1000) % 30)
+      setTotpExpiry(remaining)
+    }
+
+    updateExpiry()
+    const interval = setInterval(() => {
+      updateExpiry()
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -80,6 +97,19 @@ export default function TFAChallengeStep({ onVerify, onCancel, onUseRecoveryCode
               <AlertCircle size={12} /> {error}
             </p>
           )}
+          {/* TOTP expiry countdown */}
+          <div className={`mt-2 text-xs flex items-center justify-center gap-1 ${
+            totpExpiry <= 5 ? 'text-amber-400' : 'text-slate-500'
+          }`}>
+            {totpExpiry <= 5 && (
+              <span className="animate-pulse">⏱️</span>
+            )}
+            <span>
+              {totpExpiry <= 5 
+                ? `Code expires in ${totpExpiry}s - enter quickly!` 
+                : `New code in ${totpExpiry}s`}
+            </span>
+          </div>
         </div>
 
         <div className="flex gap-3">
