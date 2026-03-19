@@ -199,3 +199,29 @@
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* Leaflet popup fixes - remove default white background and border */
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: auto !important;
+  min-width: 220px !important;
+  line-height: 1.5 !important;
+  border: none !important;
+}
+
+.leaflet-popup-tip {
+  background: #1e293b !important;
+}
+
+.leaflet-popup-close-button {
+  display: none !important;
+}
