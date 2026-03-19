@@ -109,12 +109,16 @@ export function normalizeApiError(error) {
     const messages = data.detail.map(normalizePydanticError).filter(Boolean)
     if (messages.length > 0) return { title: 'Validation Error', messages }
   }
+  return null
+}
 
   // Handle { errors: [...] } format
   if (Array.isArray(data?.errors)) {
     const messages = data.errors.map(normalizeErrorItem).filter(Boolean)
     if (messages.length > 0) return { title: 'Validation Error', messages }
   }
+  return null
+}
 
   // Handle { message: "..." } format
   if (data?.message) {
@@ -124,11 +128,15 @@ export function normalizeApiError(error) {
     }
     if (typeof msg === 'string') return { messages: [msg] }
   }
+  return null
+}
 
-  // Handle { error: "..." } format
+function extractFromErrorField(data) {
   if (data?.error && typeof data.error === 'string') {
     return { messages: [data.error] }
   }
+  return null
+}
 
   // Handle network errors
   const networkError = getNetworkErrorMessage(error)
@@ -176,6 +184,8 @@ function getNetworkErrorMessage(error) {
       messages: ['No response from server. Please check your internet connection.'],
     }
   }
+  return null
+}
 
   return null
 }

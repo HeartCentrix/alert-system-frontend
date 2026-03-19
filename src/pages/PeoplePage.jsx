@@ -91,6 +91,53 @@ function getUserErrorMessage(error) {
   return error.message || defaultMsg
 }
 
+// ── UserModal helpers ────────────────────────────────────────────────────────
+
+function buildFieldErrorMessage(e) {
+  const field = e.loc?.[1] || e.loc?.[0] || 'field'
+  const rawMsg = e.msg || ''
+  let friendlyMsg = rawMsg
+
+  if (field === 'email' && (rawMsg.includes('email') || rawMsg.includes('@'))) {
+    friendlyMsg = 'Enter a valid email address (e.g., name@company.com)'
+  } else if (field === 'phone' && rawMsg.includes('pattern')) {
+    friendlyMsg = 'Phone can only contain numbers, spaces, and symbols like +, -, (, )'
+  } else if (field === 'password' && rawMsg.includes('8')) {
+    friendlyMsg = 'Password must be at least 8 characters'
+  } else if ((field === 'first_name' || field === 'last_name')) {
+    if (rawMsg.includes('required') || rawMsg.includes('length')) {
+      friendlyMsg = 'This field is required'
+    } else if (rawMsg.includes('pattern')) {
+      friendlyMsg = 'Use only letters, spaces, hyphens, and apostrophes'
+    }
+  }
+
+  return `${field.replace('_', ' ')}: ${friendlyMsg}`
+}
+
+function parseUserApiError(error) {
+  if (error.response?.status === 401) {
+    return 'Session expired. Please log in again.'
+  }
+  if (error.response?.status === 403) {
+    return 'You do not have permission to perform this action.'
+  }
+  if (error.response?.status === 422) {
+    const details = error.response?.data?.detail
+    if (Array.isArray(details)) {
+      return details.map(buildFieldErrorMessage).join(', ')
+    }
+    if (details) {
+      return typeof details === 'object' ? details.message : details
+    }
+  }
+  if (error.response?.data?.detail) {
+    const detail = error.response.data.detail
+    return typeof detail === 'object' ? detail.message : detail
+  }
+  return error.message || 'Error saving user'
+}
+
 function UserModal({ user, onClose, onSaved }) {
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
     defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
@@ -142,6 +189,31 @@ function UserModal({ user, onClose, onSaved }) {
   if (locationsError && !locationsError.isFetching) {
     console.error('Failed to load locations:', locationsError)
     // Don't crash the component - just continue with empty locations list
+  }
+
+  const handleUpdate = async (data, cleanedData) => {
+    await usersAPI.update(user.id, cleanedData)
+    await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+    toast.success('User updated')
+    onSaved()
+    onClose()
+  }
+
+  const handleCreate = async (data, cleanedData) => {
+    const password = data.password || generateTempPassword()
+    console.log('Creating user with data:', { ...cleanedData, password })
+    await usersAPI.create({ ...cleanedData, password })
+    await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+
+    if (!data.password) {
+      setGeneratedPassword(password)
+      toast.success('User created! Copy the password below')
+      reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+    } else {
+      toast.success('User created')
+      onSaved()
+      onClose()
+    }
   }
 
   const onSubmit = async (data) => {
@@ -605,7 +677,7 @@ export default function PeoplePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => usersAPI.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); toast.success('User deleted') },
     onError: (error) => {
       const errorMessage = error.response?.data?.detail || 'Error deleting user'
       toast.error(errorMessage)
@@ -616,6 +688,8 @@ export default function PeoplePage() {
     mutationFn: (userIds) => usersAPI.bulkDelete(userIds),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      qc.invalidateQueries({ queryKey: ['map-data'] })
       setSelectedUsers(new Set())
       setBulkDeleteModal(false)
 
@@ -667,6 +741,8 @@ export default function PeoplePage() {
       }
 
       qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      qc.invalidateQueries({ queryKey: ['map-data'] })
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Import failed'
       toast.error(errorMessage)
@@ -857,7 +933,7 @@ export default function PeoplePage() {
           onClose={() => {
             setModal(null)
           }}
-          onSaved={() => qc.invalidateQueries({ queryKey: ['users'] })}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); }}
         />
       )}
 
