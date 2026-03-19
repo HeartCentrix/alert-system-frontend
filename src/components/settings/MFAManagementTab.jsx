@@ -84,39 +84,6 @@ export default function MFAManagementTab({ authProviders }) {
           )}
         </>
       )}
-
-      {/* Authentication Providers Section */}
-      {authProviders && (
-        <div className="card p-6">
-          <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
-            <Lock size={18} />
-            Authentication Providers
-          </h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Email / Password</span>
-              <span className={`text-xs px-2 py-1 rounded ${authProviders?.local_enabled ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-500'}`}>
-                {authProviders?.local_enabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Microsoft Entra ID (SSO)</span>
-              <span className={`text-xs px-2 py-1 rounded ${authProviders?.entra_enabled ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-500'}`}>
-                {authProviders?.entra_enabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Active Directory (LDAP)</span>
-              <span className={`text-xs px-2 py-1 rounded ${authProviders?.ldap_enabled ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-500'}`}>
-                {authProviders?.ldap_enabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 mt-2">
-              Authentication providers are configured by your system administrator via environment variables.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
