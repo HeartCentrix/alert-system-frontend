@@ -460,6 +460,93 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
   )
 }
 
+// Table row component for user display
+function UserTableRow({ user, currentUser, isSelected, isDeleting, isAdmin, onToggleSelect, onEdit, onDelete }) {
+  const isSelf = user.id === currentUser?.id
+
+  return (
+    <tr key={user.id} className={cn("table-row", isSelected ? "bg-primary-900/20" : "")}>
+      {isAdmin && (
+        <td className="px-4 py-3.5">
+          <button
+            onClick={() => onToggleSelect(user.id)}
+            disabled={isSelf}
+            className={cn(
+              "hover:text-slate-300 transition-colors",
+              isSelf ? "text-slate-700 cursor-not-allowed" : isSelected ? "text-primary-400" : "text-slate-500"
+            )}
+            title={isSelf ? "You cannot delete yourself" : isSelected ? "Deselect" : "Select"}
+          >
+            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+          </button>
+        </td>
+      )}
+      <td className="px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
+            {getInitials(user.full_name)}
+          </div>
+          <div>
+            <div className="text-sm font-medium text-slate-200">{user.full_name}</div>
+            <div className="text-xs text-slate-500">{user.employee_id && `#${user.employee_id}`}</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-5 py-3.5">
+        <div className="text-xs text-slate-400">{user.email}</div>
+        {user.phone && <div className="text-xs text-slate-500 font-mono">{user.phone}</div>}
+      </td>
+      <td className="px-5 py-3.5 text-sm text-slate-400">{user.department || '—'}</td>
+      <td className="px-5 py-3.5">
+        <span className={cn(
+          'badge',
+          user.role === 'super_admin' ? 'badge-red' :
+          user.role === 'admin' ? 'badge-orange' :
+          user.role === 'manager' ? 'badge-blue' : 'badge-gray'
+        )}>{user.role?.replaceAll('_', ' ')}</span>
+      </td>
+      <td className="px-5 py-3.5">
+        <span className={user.is_active ? 'badge-green' : 'badge-red'}>
+          {user.is_active ? 'Active' : 'Inactive'}
+        </span>
+      </td>
+      <td className="px-5 py-3.5">
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => onEdit(user)}
+            className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+            disabled={isDeleting(user.id)}
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={() => {
+              if (confirm(`Delete ${user.full_name}?`)) onDelete(user.id)
+            }}
+            disabled={isSelf || isDeleting(user.id)}
+            className={cn(
+              "p-1.5 transition-colors",
+              isSelf || isDeleting(user.id)
+                ? "text-slate-700 cursor-not-allowed"
+                : "text-slate-500 hover:text-danger-400"
+            )}
+            title={isSelf ? "You cannot delete yourself" : isDeleting(user.id) ? "Deleting..." : "Delete"}
+          >
+            {isDeleting(user.id) ? (
+              <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <Trash2 size={14} />
+            )}
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 export default function PeoplePage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
@@ -702,95 +789,19 @@ export default function PeoplePage() {
             {!isLoading && users.length === 0 && (
               <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12 text-slate-500 text-sm">No people found</td></tr>
             )}
-            {users.map(u => {
-              const isSelected = selectedUsers.has(u.id)
-              const isSelf = u.id === currentUser?.id
-              
-              return (
-                <tr key={u.id} className={cn(
-                  "table-row",
-                  isSelected ? "bg-primary-900/20" : ""
-                )}>
-                  {isAdmin && (
-                    <td className="px-4 py-3.5">
-                      <button
-                        onClick={() => toggleSelectUser(u.id)}
-                        disabled={isSelf}
-                        className={cn(
-                          "hover:text-slate-300 transition-colors",
-                          isSelf ? "text-slate-700 cursor-not-allowed" : isSelected ? "text-primary-400" : "text-slate-500"
-                        )}
-                        title={isSelf ? "You cannot delete yourself" : isSelected ? "Deselect" : "Select"}
-                      >
-                        {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                      </button>
-                    </td>
-                  )}
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
-                        {getInitials(u.full_name)}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-200">{u.full_name}</div>
-                        <div className="text-xs text-slate-500">{u.employee_id && `#${u.employee_id}`}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="text-xs text-slate-400">{u.email}</div>
-                    {u.phone && <div className="text-xs text-slate-500 font-mono">{u.phone}</div>}
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-slate-400">{u.department || '—'}</td>
-                  <td className="px-5 py-3.5">
-                    <span className={cn(
-                      'badge',
-                      u.role === 'super_admin' ? 'badge-red' :
-                      u.role === 'admin' ? 'badge-orange' :
-                      u.role === 'manager' ? 'badge-blue' : 'badge-gray'
-                    )}>{u.role?.replaceAll('_', ' ')}</span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span className={u.is_active ? 'badge-green' : 'badge-red'}>
-                      {u.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setModal(u)}
-                        className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-                        disabled={isDeleting(u.id)}
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id)
-                        }}
-                        disabled={isSelf || isDeleting(u.id)}
-                        className={cn(
-                          "p-1.5 transition-colors",
-                          isSelf || isDeleting(u.id)
-                            ? "text-slate-700 cursor-not-allowed"
-                            : "text-slate-500 hover:text-danger-400"
-                        )}
-                        title={isSelf ? "You cannot delete yourself" : isDeleting(u.id) ? "Deleting..." : "Delete"}
-                      >
-                        {isDeleting(u.id) ? (
-                          <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+            {users.map(u => (
+              <UserTableRow
+                key={u.id}
+                user={u}
+                currentUser={currentUser}
+                isSelected={selectedUsers.has(u.id)}
+                isDeleting={isDeleting}
+                isAdmin={isAdmin}
+                onToggleSelect={toggleSelectUser}
+                onEdit={setModal}
+                onDelete={(id) => deleteMutation.mutate(id)}
+              />
+            ))}
           </tbody>
         </table>
         </div>
