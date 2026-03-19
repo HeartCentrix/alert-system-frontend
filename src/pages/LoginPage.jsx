@@ -45,6 +45,10 @@ export default function LoginPage() {
   const [pendingRecoveryCodes, setPendingRecoveryCodes] = useState(null)
   const [authProviders, setAuthProviders] = useState({ local_enabled: true })
   const { register, handleSubmit, formState: { errors } } = useForm()
+  
+  // 2026 STANDARD: Track failed login attempts for additional client-side protection
+  const [failedAttempts, setFailedAttempts] = useState(0)
+  const MAX_FAILED_ATTEMPTS = 5  // Hard limit before requiring cooldown
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
@@ -132,6 +136,9 @@ export default function LoginPage() {
       }
     }
 
+    // 2026 STANDARD: Track failed attempts for additional brute force protection
+    setFailedAttempts(prev => prev + 1)
+
     if (retryAfterSeconds) {
       const seconds = parseInt(retryAfterSeconds)
       setLockoutExpiry(Date.now() + (seconds * 1000))
@@ -142,7 +149,14 @@ export default function LoginPage() {
   }
 
   const onSubmit = async ({ email, password }) => {
+    // 2026 STANDARD: Hard client-side limit to prevent brute force
     if (lockoutExpiry && Date.now() < lockoutExpiry) return
+    if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+      toast.error('Too many failed attempts. Please try again later.')
+      setLockoutExpiry(Date.now() + 300000) // 5 minute cooldown
+      return
+    }
+    
     setLoading(true)
     try {
       const result = await login(email, password)
@@ -154,6 +168,7 @@ export default function LoginPage() {
       }
       toast.success('Welcome back')
       setLockoutExpiry(null)
+      setFailedAttempts(0) // Reset on success
       navigate('/dashboard')
     } catch (err) {
       handleLoginError(err)
@@ -177,6 +192,7 @@ export default function LoginPage() {
 
       toast.success('Authentication successful')
       setLockoutExpiry(null)
+      setFailedAttempts(0) // Reset on success
       navigate('/dashboard')
     } catch (err) {
       const message = err.response?.data?.detail || err.message
@@ -208,6 +224,7 @@ export default function LoginPage() {
       await verifyMFAWithRecoveryCode(code, mfaChallengeToken)
       toast.success('Recovery code verified. Welcome back!')
       setLockoutExpiry(null)
+      setFailedAttempts(0) // Reset on success
       navigate('/dashboard')
     } catch (err) {
       const message = err.response?.data?.detail || err.message
