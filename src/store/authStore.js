@@ -85,13 +85,76 @@ const registerBeforeUnloadHandler = () => {
     // Clear tokens on tab close (prevents session restoration attacks)
     clearAllSessionData()
   }
-  
+
   window.addEventListener('beforeunload', handleBeforeUnload)
-  
+
   // Return cleanup function
   return () => {
     window.removeEventListener('beforeunload', handleBeforeUnload)
   }
+}
+
+// Helper: Initialize authentication with token refresh logic
+async function initializeAuth() {
+  const persistedToken = getAccessToken()
+  
+  try {
+    // Try to fetch user with current token
+    const { data } = await authAPI.me()
+    return {
+      accessToken: persistedToken,
+      user: data,
+      isAuthenticated: true,
+      isLoading: false,
+      isInitializing: false,
+      sessionId: getSessionId()
+    }
+  } catch (error) {
+    // Handle 401/403 with token refresh
+    if (error?.response?.status === 401 || error?.response?.status === 403) {
+      const refreshResult = await handleTokenRefresh()
+      if (refreshResult) {
+        return refreshResult
+      }
+    }
+    // Auth failed and refresh didn't work - clear session
+    clearAllSessionData()
+    throw error
+  }
+}
+
+// Helper: Handle token refresh flow
+async function handleTokenRefresh() {
+  try {
+    const refreshTokenFromStorage = getRefreshToken()
+    const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
+
+    if (refreshData?.access_token) {
+      // Save new tokens
+      if (refreshData.refresh_token) {
+        saveRefreshToken(refreshData.refresh_token)
+      }
+      const expiresIn = refreshData.expires_in || 3600
+      saveAccessToken(refreshData.access_token, expiresIn)
+
+      // Fetch user data with new token
+      const { data: userData } = await authAPI.me()
+
+      return {
+        accessToken: refreshData.access_token,
+        refreshToken: refreshData.refresh_token || refreshTokenFromStorage,
+        user: userData,
+        isAuthenticated: true,
+        isLoading: false,
+        isInitializing: false,
+        sessionId: getSessionId()
+      }
+    }
+  } catch (refreshError) {
+    // Refresh failed - clear session
+    clearAllSessionData()
+  }
+  return null
 }
 
 const useAuthStore = create((set, get) => ({
@@ -124,78 +187,26 @@ const useAuthStore = create((set, get) => ({
     }
 
     try {
-      // 2026 STANDARD: Check token expiry before using
-      const persistedToken = getAccessToken()
-      if (persistedToken) {
-        // Check if token is expired
-        if (isAccessTokenExpired()) {
-          // Token expired - clear and force re-auth
-          clearAllSessionData()
-          set({ 
-            accessToken: null, 
-            refreshToken: null,
-            user: null, 
-            isAuthenticated: false, 
-            isLoading: false, 
-            isInitializing: false 
-          })
-          return
-        }
-        set({ accessToken: persistedToken })
-      }
+      // Initialize authentication (handles token validation and refresh)
+      const authResult = await initializeAuth()
+      set(authResult)
 
-      const { data } = await authAPI.me()
-      set({ 
-        user: data, 
-        isAuthenticated: true, 
-        isLoading: false, 
-        isInitializing: false,
-        sessionId: getSessionId()
-      })
       // Start heartbeat if user is authenticated
-      get().startHeartbeat()
-    } catch (error) {
-      if (error?.response?.status === 401 || error?.response?.status === 403) {
-        try {
-          const refreshTokenFromStorage = getRefreshToken()
-          const { data: refreshData } = await authAPI.refresh(refreshTokenFromStorage)
-
-          if (refreshData?.access_token) {
-            // 2026 STANDARD: Save with expiry time
-            if (refreshData.refresh_token) {
-              saveRefreshToken(refreshData.refresh_token)
-            }
-            // Extract expiry from token or use default (1 hour)
-            const expiresIn = refreshData.expires_in || 3600
-            saveAccessToken(refreshData.access_token, expiresIn)
-            set({
-              accessToken: refreshData.access_token,
-              refreshToken: refreshData.refresh_token || refreshTokenFromStorage,
-              sessionId: getSessionId()
-            })
-            const { data: userData } = await authAPI.me()
-            set({ user: userData, isAuthenticated: true, isLoading: false, isInitializing: false })
-            // Start heartbeat if user is authenticated
-            get().startHeartbeat()
-            return
-          }
-        } catch (refreshError) {
-          // Refresh failed - session truly expired, clear everything
-          clearAllSessionData()
-        }
+      if (authResult.isAuthenticated) {
+        get().startHeartbeat()
       }
-
-      // Either not a 401/403 error, or refresh also failed - clear session
+    } catch (error) {
+      // Authentication failed - clear all session data
       clearAllSessionData()
-      set({ 
-        user: null, 
-        isAuthenticated: false, 
-        isLoading: false, 
-        isInitializing: false, 
-        accessToken: null, 
-        refreshToken: null, 
+      set({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        isInitializing: false,
+        accessToken: null,
+        refreshToken: null,
         sessionId: null,
-        mfaState: null 
+        mfaState: null
       })
     }
   },
