@@ -38,28 +38,30 @@ const NAV = [
   { label: 'My Account', icon: Settings, to: '/settings' },
 ]
 
-// ── Sidebar sub-components ───────────────────────────────────────────────────
-
-function NavItem({ item, location, sidebarOpen }) {
+// Render navigation item
+function NavItem({ item, sidebarOpen, location }) {
   const Icon = item.icon
-
-  if (item.customActive) {
-    const active = item.customActive(location.pathname, location.search)
-    return (
-      <NavLink
-        to={item.to}
-        className={() => cn('nav-item', active && 'active', !sidebarOpen && 'justify-center')}
-      >
-        <Icon size={16} className="shrink-0" />
-        {sidebarOpen && <span>{item.label}</span>}
-      </NavLink>
-    )
+  
+  if (item.header) {
+    return sidebarOpen ? (
+      <div className="px-2 pt-4 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">
+        {item.label}
+      </div>
+    ) : <div className="my-2 border-t border-surface-700/40" />
   }
-
+  
+  const isActive = item.customActive
+    ? item.customActive(location.pathname, location.search)
+    : false
+  
   return (
     <NavLink
       to={item.to}
-      className={({ isActive }) => cn('nav-item', isActive && 'active', !sidebarOpen && 'justify-center')}
+      className={({ isActive: linkIsActive }) => cn(
+        'nav-item',
+        (isActive || linkIsActive) && 'active',
+        !sidebarOpen && 'justify-center'
+      )}
     >
       <Icon size={16} className="shrink-0" />
       {sidebarOpen && <span>{item.label}</span>}
@@ -67,45 +69,43 @@ function NavItem({ item, location, sidebarOpen }) {
   )
 }
 
-function UserProfileFooter({ user, sidebarOpen, onLogout }) {
-  const displayName = user?.full_name
-  const displayRole = user?.role?.replaceAll('_', ' ')
-  const initials = getInitials(user?.full_name || user?.email || 'U')
-
-  if (sidebarOpen) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors">
-              <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                {initials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-slate-200 truncate">{displayName}</div>
-                <div className="text-xs text-slate-500 truncate">{displayRole}</div>
-              </div>
-              <button
-                onClick={onLogout}
-                className="text-slate-500 hover:text-danger-400 transition-colors"
-                title="Logout"
-                aria-label="Logout"
-              >
-                <LogOut size={15} />
-              </button>
+// User profile section for expanded sidebar
+function UserProfileExpanded({ user, onLogout }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-800 cursor-pointer transition-colors">
+            <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {getInitials(user?.full_name || user?.email || 'U')}
             </div>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
-            <div className="text-center">
-              <div className="font-medium">{displayName}</div>
-              <div className="text-xs text-slate-400">{displayRole}</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-slate-200 truncate">{user?.full_name}</div>
+              <div className="text-xs text-slate-500 truncate">{user?.role?.replaceAll('_', ' ')}</div>
             </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    )
-  }
+            <button
+              onClick={onLogout}
+              className="text-slate-500 hover:text-danger-400 transition-colors"
+              title="Logout"
+              aria-label="Logout"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+          <div className="text-center">
+            <div className="font-medium">{user?.full_name}</div>
+            <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
 
+// User profile section for collapsed sidebar
+function UserProfileCollapsed({ user, onLogout }) {
   return (
     <TooltipProvider>
       <Tooltip>
@@ -121,10 +121,42 @@ function UserProfileFooter({ user, sidebarOpen, onLogout }) {
         </TooltipTrigger>
         <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
           <div className="text-center">
-            <div className="font-medium">{displayName}</div>
-            <div className="text-xs text-slate-400">{displayRole}</div>
+            <div className="font-medium">{user?.full_name}</div>
+            <div className="text-xs text-slate-400">{user?.role?.replaceAll('_', ' ')}</div>
             <div className="text-xs text-danger-400 mt-1">Click to logout</div>
           </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+// Sidebar toggle button component
+function SidebarToggleButton({ sidebarOpen, onToggle }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onToggle}
+            className={cn(
+              'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
+              'w-11 h-11 min-w-[44px] min-h-[44px]',
+              'rounded-lg',
+              'bg-surface-900 border border-surface-700/60',
+              'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
+              'active:bg-surface-700 active:text-white',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
+              'transition-all duration-200 ease-in-out',
+              'shadow-lg'
+            )}
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            {sidebarOpen ? <ChevronLeft size={20} strokeWidth={2} /> : <ChevronRight size={20} strokeWidth={2} />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+          {sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -162,32 +194,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) 
       )}
 
       {/* Toggle Button - Outside sidebar at top-right (desktop and mobile) */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={toggleSidebar}
-              className={cn(
-                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
-                'w-11 h-11 min-w-[44px] min-h-[44px]',
-                'rounded-lg',
-                'bg-surface-900 border border-surface-700/60',
-                'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
-                'active:bg-surface-700 active:text-white',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
-                'transition-all duration-200 ease-in-out',
-                'shadow-lg'
-              )}
-              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              {sidebarOpen ? <ChevronLeft size={20} strokeWidth={2} /> : <ChevronRight size={20} strokeWidth={2} />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
-            {sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <SidebarToggleButton sidebarOpen={sidebarOpen} onToggle={toggleSidebar} />
 
       {/* Sidebar */}
       <aside className={cn(
@@ -246,19 +253,18 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) 
         'flex-1 overflow-y-auto px-3 space-y-0.5',
         !sidebarOpen && 'px-2'
       )}>
-        {NAV.map((item, i) => {
-          if (item.header) {
-            return sidebarOpen
-              ? <div key={i} className="px-2 pt-4 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">{item.label}</div>
-              : <div key={i} className="my-2 border-t border-surface-700/40" />
-          }
-          return <NavItem key={i} item={item} location={location} sidebarOpen={sidebarOpen} />
-        })}
+        {NAV.map((item, i) => (
+          <NavItem key={i} item={item} sidebarOpen={sidebarOpen} location={location} />
+        ))}
       </nav>
 
       {/* User profile - sticks to bottom */}
       <div className="mt-auto p-3 border-t border-surface-700/60">
-        <UserProfileFooter user={user} sidebarOpen={sidebarOpen} onLogout={handleLogout} />
+        {sidebarOpen ? (
+          <UserProfileExpanded user={user} onLogout={handleLogout} />
+        ) : (
+          <UserProfileCollapsed user={user} onLogout={handleLogout} />
+        )}
       </div>
     </aside>
     </div>

@@ -1,6 +1,6 @@
 /**
  * Test Setup File
- * 
+ *
  * Configures testing environment for Vitest + React Testing Library
  */
 import '@testing-library/jest-dom';
@@ -31,19 +31,19 @@ Object.defineProperty(window, 'matchMedia', {
 global.IntersectionObserver = class IntersectionObserver {
   constructor() {}
   disconnect() {}
-  observe() {}
+  observe(_target: Element) {}
   takeRecords() {
     return [];
   }
-  unobserve() {}
+  unobserve(_target: Element) {}
 };
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
   constructor() {}
   disconnect() {}
-  observe() {}
-  unobserve() {}
+  observe(_target: Element) {}
+  unobserve(_target: Element) {}
 };
 
 // Mock requestAnimationFrame

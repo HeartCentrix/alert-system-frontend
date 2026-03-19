@@ -84,6 +84,7 @@ export function useLocationAutocomplete(options = {}) {
 
   // Persist cache to localStorage (throttled to avoid I/O spam)
   const persistCacheRef = useRef(null)
+  
   const persistCache = useCallback(() => {
     if (persistCacheRef.current) return
 
@@ -96,12 +97,8 @@ export function useLocationAutocomplete(options = {}) {
         localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cacheObj))
       } catch (e) {
         if (e.name === 'QuotaExceededError') {
-          // localStorage FULL — evict oldest half
-          const entries = Array.from(memoryCacheRef.current.entries())
-            .sort((a, b) => (a[1].cachedAt || 0) - (b[1].cachedAt || 0))
-          const toDelete = entries.slice(0, Math.floor(entries.length / 2))
-          toDelete.forEach(([key]) => memoryCacheRef.current.delete(key))
-          // Retry persist
+          evictOldestCacheEntry()
+          // Retry persist after eviction
           try {
             const cacheObj = {}
             memoryCacheRef.current.forEach((value, key) => {
@@ -115,6 +112,14 @@ export function useLocationAutocomplete(options = {}) {
       }
       persistCacheRef.current = null
     }, 2000)
+  }, [])
+
+  // Evict oldest cache entry when storage is full
+  const evictOldestCacheEntry = useCallback(() => {
+    const entries = Array.from(memoryCacheRef.current.entries())
+      .sort((a, b) => (a[1].cachedAt || 0) - (b[1].cachedAt || 0))
+    const toDelete = entries.slice(0, Math.floor(entries.length / 2))
+    toDelete.forEach(([key]) => memoryCacheRef.current.delete(key))
   }, [])
 
   // ── Cache entry generation ────────────────────────────────────────
@@ -190,10 +195,30 @@ export function useLocationAutocomplete(options = {}) {
 
   // ── Fetch with rate limiting ───────────────────────────────────────
 
+  // Handle fetch errors and set appropriate error message
+  const handleFetchError = useCallback((err) => {
+    if (err.name === 'AbortError' || err.name === 'CanceledError') {
+      return
+    }
+
+    console.error('Location autocomplete error:', err)
+
+    const errorMessages = {
+      429: 'Too many requests. Please wait a moment.',
+      503: 'Location service temporarily unavailable.',
+    }
+
+    const status = err.response?.status
+    const message = errorMessages[status] || err.response?.data?.detail || 'Failed to fetch location suggestions.'
+    
+    setError(message)
+    setResults([])
+  }, [])
+
   const fetchResults = useCallback(async (searchQuery) => {
     const cacheKey = getCacheKey(searchQuery)
 
-    // Check L0/L1 cache (instant, no network)
+    // Check cache first (instant, no network)
     const cached = getFromCache(cacheKey)
     if (cached) {
       setResults(cached)
@@ -202,7 +227,7 @@ export function useLocationAutocomplete(options = {}) {
       return
     }
 
-    // Deduplicate: if there's already a pending request, wait for it
+    // Deduplicate pending requests
     if (pendingRequestRef.current) {
       try {
         const pendingResults = await pendingRequestRef.current
@@ -214,19 +239,18 @@ export function useLocationAutocomplete(options = {}) {
       return
     }
 
-    // Rate limiting: enforce minimum time between API calls
+    // Rate limiting
     const now = Date.now()
     const timeSinceLastRequest = now - lastRequestTimeRef.current
     if (timeSinceLastRequest < minRequestInterval) {
-      const delay = minRequestInterval - timeSinceLastRequest
-      await new Promise(resolve => setTimeout(resolve, delay))
+      await new Promise(resolve => setTimeout(resolve, minRequestInterval - timeSinceLastRequest))
     }
 
     lastRequestTimeRef.current = Date.now()
     setLoading(true)
     setError(null)
 
-    // Cancel any in-flight request
+    // Cancel in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
@@ -241,24 +265,16 @@ export function useLocationAutocomplete(options = {}) {
       })
 
       const fetchedResults = data.results || []
-
-      // Cache permanently (both non-empty and empty results)
       setCache(cacheKey, fetchedResults)
-
       setResults(fetchedResults)
       setError(null)
     } catch (err) {
-      if (err.name === 'AbortError' || err.name === 'CanceledError') {
-        return
-      }
-      console.error('Location autocomplete error:', err)
-      setError(resolveAutocompleteError(err))
-      setResults([])
+      handleFetchError(err)
     } finally {
       setLoading(false)
       pendingRequestRef.current = null
     }
-  }, [getCacheKey, getFromCache, setCache, limit, countrycodes, viewbox, bounded, minRequestInterval])
+  }, [getCacheKey, getFromCache, setCache, handleFetchError, limit, countrycodes, viewbox, bounded, minRequestInterval])
 
   // ── Debounced query watcher ────────────────────────────────────────
 

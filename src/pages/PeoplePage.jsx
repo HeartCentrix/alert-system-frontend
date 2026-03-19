@@ -13,37 +13,82 @@ const ROLES = ['viewer', 'manager', 'admin', 'super_admin']
 function generateTempPassword() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
   const length = 16
-  let password = ''
-  // Ensure at least one of each type
-  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]
-  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]
-  password += '0123456789'[Math.floor(Math.random() * 10)]
-  password += '!@#$%^&*'[Math.floor(Math.random() * 8)]
-  // Fill the rest randomly
-  for (let i = password.length; i < length; i++) {
-    password += chars[Math.floor(Math.random() * chars.length)]
+  const passwordChars = [
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)],
+    'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)],
+    '0123456789'[Math.floor(Math.random() * 10)],
+    '!@#$%^&*'[Math.floor(Math.random() * 8)],
+  ]
+  
+  for (let i = 4; i < length; i++) {
+    passwordChars.push(chars[Math.floor(Math.random() * chars.length)])
   }
-  return password.split('').sort(() => Math.random() - 0.5).join('')
+  
+  return passwordChars.sort(() => Math.random() - 0.5).join('')
 }
 
 // Clean form data by converting empty strings to null and removing empty location_id
 function cleanUserData(data) {
   const cleaned = { ...data }
-  
-  // Convert empty strings to null for optional fields
   const optionalFields = ['phone', 'department', 'title', 'employee_id']
-  optionalFields.forEach(field => {
-    if (cleaned[field] === '' || cleaned[field] === null || cleaned[field] === undefined) {
-      delete cleaned[field]
-    }
-  })
   
-  // Handle location_id - convert empty string to undefined (omit from request)
-  if (cleaned.location_id === '' || cleaned.location_id === null || cleaned.location_id === undefined) {
-    delete cleaned.location_id
+  optionalFields.forEach(field => {
+    if (!cleaned[field]) delete cleaned[field]
+  })
+
+  if (!cleaned.location_id) delete cleaned.location_id
+
+  return cleaned
+}
+
+// Format validation error message for a specific field
+function formatFieldError(field, rawMsg) {
+  const friendlyMessages = {
+    email: 'Enter a valid email address (e.g., name@company.com)',
+    phone: 'Phone can only contain numbers, spaces, and symbols like +, -, (, )',
+    password: 'Password must be at least 8 characters',
+    first_name: rawMsg.includes('required') || rawMsg.includes('length') 
+      ? 'This field is required' 
+      : 'Use only letters, spaces, hyphens, and apostrophes',
+    last_name: rawMsg.includes('required') || rawMsg.includes('length')
+      ? 'This field is required'
+      : 'Use only letters, spaces, hyphens, and apostrophes',
   }
   
-  return cleaned
+  return friendlyMessages[field] || rawMsg
+}
+
+// Extract error messages from validation response
+function extractValidationErrors(errors) {
+  return errors.map(e => {
+    const field = e.loc?.[1] || e.loc?.[0] || 'field'
+    const rawMsg = e.msg || ''
+    const friendlyMsg = formatFieldError(field, rawMsg)
+    return `${field.replace('_', ' ')}: ${friendlyMsg}`
+  })
+}
+
+// Get user-friendly error message from API error
+function getUserErrorMessage(error) {
+  const defaultMsg = 'Error saving user'
+  
+  if (!error?.response) return defaultMsg
+  
+  const { status, data } = error.response
+  
+  if (status === 401) return 'Session expired. Please log in again.'
+  if (status === 403) return 'You do not have permission to perform this action.'
+  
+  if (status === 422 && Array.isArray(data?.detail)) {
+    const fieldErrors = extractValidationErrors(data.detail)
+    return fieldErrors.join(', ')
+  }
+  
+  if (data?.detail) {
+    return typeof data.detail === 'object' ? data.detail.message : data.detail
+  }
+  
+  return error.message || defaultMsg
 }
 
 // ── UserModal helpers ────────────────────────────────────────────────────────
@@ -174,24 +219,33 @@ function UserModal({ user, onClose, onSaved }) {
   const onSubmit = async (data) => {
     setLoading(true)
     try {
-      console.log('Form data:', data)
       const cleanedData = cleanUserData(data)
-      console.log('Cleaned data:', cleanedData)
 
       if (user?.id) {
         await usersAPI.update(user.id, cleanedData)
-        // Invalidate users list and filter options to reflect changes
         await queryClient.invalidateQueries({ queryKey: ['users'], refetchType: 'all' })
         await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
         toast.success('User updated')
         onSaved()
         onClose()
       } else {
-        await handleCreate(data, cleanedData)
+        const password = data.password || generateTempPassword()
+        await usersAPI.create({ ...cleanedData, password })
+        await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
+
+        if (!data.password) {
+          setGeneratedPassword(password)
+          toast.success('User created! Copy the password below')
+          reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+        } else {
+          toast.success('User created')
+          onSaved()
+          onClose()
+        }
       }
     } catch (error) {
-      console.error('Error saving user:', error)
-      toast.error(parseUserApiError(error))
+      const errorMessage = getUserErrorMessage(error)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -478,31 +532,63 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
   )
 }
 
-// ── UserTableRow sub-component (extracted to reduce PeoplePage complexity) ────
-
+// Get badge class based on user role
 function getRoleBadgeClass(role) {
-  if (role === 'super_admin') return 'badge-red'
-  if (role === 'admin') return 'badge-orange'
-  if (role === 'manager') return 'badge-blue'
-  return 'badge-gray'
+  const roleClasses = {
+    super_admin: 'badge-red',
+    admin: 'badge-orange',
+    manager: 'badge-blue',
+  }
+  return roleClasses[role] || 'badge-gray'
 }
 
-function UserTableRow({ u, isAdmin, currentUser, selectedUsers, isDeleting, onEdit, onDelete, onToggleSelect }) {
-  const isSelected = selectedUsers.has(u.id)
-  const isSelf = u.id === currentUser?.id
+// Get status badge class based on active state
+function getStatusBadgeClass(isActive) {
+  return isActive ? 'badge-green' : 'badge-red'
+}
+
+// Get button className based on user state
+function getActionButtonClass(isSelf, isDeleting) {
+  if (isSelf || isDeleting) return "text-slate-700 cursor-not-allowed"
+  return "text-slate-500 hover:text-danger-400"
+}
+
+// Get button title based on user state
+function getActionButtonTitle(isSelf, isDeleting) {
+  if (isSelf) return "You cannot delete yourself"
+  if (isDeleting) return "Deleting..."
+  return "Delete"
+}
+
+// Render delete icon or spinner
+function DeleteIcon({ isDeleting }) {
+  if (isDeleting) {
+    return (
+      <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+    )
+  }
+  return <Trash2 size={14} />
+}
+
+// Table row component for user display
+function UserTableRow({ user, currentUser, isSelected, isDeleting, isAdmin, onToggleSelect, onEdit, onDelete }) {
+  const isSelf = user.id === currentUser?.id
 
   return (
-    <tr className={cn('table-row', isSelected ? 'bg-primary-900/20' : '')}>
+    <tr key={user.id} className={cn("table-row", isSelected ? "bg-primary-900/20" : "")}>
       {isAdmin && (
         <td className="px-4 py-3.5">
           <button
-            onClick={() => onToggleSelect(u.id)}
+            onClick={() => onToggleSelect(user.id)}
             disabled={isSelf}
             className={cn(
-              'hover:text-slate-300 transition-colors',
-              isSelf ? 'text-slate-700 cursor-not-allowed' : isSelected ? 'text-primary-400' : 'text-slate-500'
+              "hover:text-slate-300 transition-colors",
+              isSelf ? "text-slate-700 cursor-not-allowed" : isSelected ? "text-primary-400" : "text-slate-500"
             )}
-            title={isSelf ? 'You cannot delete yourself' : isSelected ? 'Deselect' : 'Select'}
+            title={isSelf ? "You cannot delete yourself" : isSelected ? "Deselect" : "Select"}
           >
             {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
           </button>
@@ -511,57 +597,47 @@ function UserTableRow({ u, isAdmin, currentUser, selectedUsers, isDeleting, onEd
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center text-xs font-bold text-primary-300 shrink-0">
-            {getInitials(u.full_name)}
+            {getInitials(user.full_name)}
           </div>
           <div>
-            <div className="text-sm font-medium text-slate-200">{u.full_name}</div>
-            <div className="text-xs text-slate-500">{u.employee_id && `#${u.employee_id}`}</div>
+            <div className="text-sm font-medium text-slate-200">{user.full_name}</div>
+            <div className="text-xs text-slate-500">{user.employee_id && `#${user.employee_id}`}</div>
           </div>
         </div>
       </td>
       <td className="px-5 py-3.5">
-        <div className="text-xs text-slate-400">{u.email}</div>
-        {u.phone && <div className="text-xs text-slate-500 font-mono">{u.phone}</div>}
+        <div className="text-xs text-slate-400">{user.email}</div>
+        {user.phone && <div className="text-xs text-slate-500 font-mono">{user.phone}</div>}
       </td>
-      <td className="px-5 py-3.5 text-sm text-slate-400">{u.department || '—'}</td>
+      <td className="px-5 py-3.5 text-sm text-slate-400">{user.department || '—'}</td>
       <td className="px-5 py-3.5">
-        <span className={cn('badge', getRoleBadgeClass(u.role))}>
-          {u.role?.replaceAll('_', ' ')}
+        <span className={cn('badge', getRoleBadgeClass(user.role))}>
+          {user.role?.replaceAll('_', ' ')}
         </span>
       </td>
       <td className="px-5 py-3.5">
-        <span className={u.is_active ? 'badge-green' : 'badge-red'}>
-          {u.is_active ? 'Active' : 'Inactive'}
+        <span className={getStatusBadgeClass(user.is_active)}>
+          {user.is_active ? 'Active' : 'Inactive'}
         </span>
       </td>
       <td className="px-5 py-3.5">
         <div className="flex gap-2 justify-end">
           <button
-            onClick={() => onEdit(u)}
+            onClick={() => onEdit(user)}
             className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-            disabled={isDeleting(u.id)}
+            disabled={isDeleting(user.id)}
           >
             <Edit2 size={14} />
           </button>
           <button
-            onClick={() => onDelete(u)}
-            disabled={isSelf || isDeleting(u.id)}
-            className={cn(
-              'p-1.5 transition-colors',
-              isSelf || isDeleting(u.id)
-                ? 'text-slate-700 cursor-not-allowed'
-                : 'text-slate-500 hover:text-danger-400'
-            )}
-            title={isSelf ? 'You cannot delete yourself' : isDeleting(u.id) ? 'Deleting...' : 'Delete'}
+            onClick={() => {
+              if (confirm(`Delete ${user.full_name}?`)) onDelete(user.id)
+            }}
+            disabled={isSelf || isDeleting(user.id)}
+            className={cn("p-1.5 transition-colors", getActionButtonClass(isSelf, isDeleting(user.id)))}
+            title={getActionButtonTitle(isSelf, isDeleting(user.id))}
           >
-            {isDeleting(u.id) ? (
-              <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <Trash2 size={14} />
-            )}
+            <DeleteIcon isDeleting={isDeleting(user.id)} />
           </button>
         </div>
       </td>
@@ -603,11 +679,8 @@ export default function PeoplePage() {
     mutationFn: (id) => usersAPI.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); qc.invalidateQueries({ queryKey: ['map-data'] }); toast.success('User deleted') },
     onError: (error) => {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
-                            : 'Error deleting user')
-      toast.error(errorMessage || 'Error deleting user')
+      const errorMessage = error.response?.data?.detail || 'Error deleting user'
+      toast.error(errorMessage)
     },
   })
 
@@ -629,11 +702,8 @@ export default function PeoplePage() {
       }
     },
     onError: (error) => {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
-                            : 'Error deleting users')
-      toast.error(errorMessage || 'Error deleting users')
+      const errorMessage = error.response?.data?.detail || 'Error deleting users'
+      toast.error(errorMessage)
     },
   })
 
@@ -644,7 +714,6 @@ export default function PeoplePage() {
     const file = e.target.files[0]
     if (!file) return
 
-    // Validate file type using MIME type (not just extension)
     const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
     if (!allowedTypes.includes(file.type)) {
       toast.error(`Invalid file type. Expected CSV, got ${file.type || 'unknown'}`)
@@ -656,7 +725,6 @@ export default function PeoplePage() {
     try {
       const { data: result } = await usersAPI.importCSV(file)
 
-      // Build success message with email notification info
       let message = `Import complete: ${result.created} created, ${result.updated} updated`
       if (result.created > 0) {
         message += `. Welcome emails sent to ${result.created} new user${result.created > 1 ? 's' : ''}`
@@ -667,23 +735,17 @@ export default function PeoplePage() {
 
       toast.success(message)
 
-      if (result.errors?.length) {
+      if (result.errors?.length && result.failed > 0) {
         console.warn('Import errors:', result.errors)
-        // Show error toast if there were failures
-        if (result.failed > 0) {
-          toast.error(`${result.failed} row(s) failed - check console for details`)
-        }
+        toast.error(`${result.failed} row(s) failed - check console for details`)
       }
 
       qc.invalidateQueries({ queryKey: ['users'] })
       qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
       qc.invalidateQueries({ queryKey: ['map-data'] })
     } catch (error) {
-      const errorMessage = error.response?.data?.detail ||
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
-                            : 'Import failed')
-      toast.error(errorMessage || 'Import failed')
+      const errorMessage = error.response?.data?.detail || 'Import failed'
+      toast.error(errorMessage)
     } finally {
       setImporting(false)
       e.target.value = ''
@@ -832,14 +894,14 @@ export default function PeoplePage() {
             {users.map(u => (
               <UserTableRow
                 key={u.id}
-                u={u}
-                isAdmin={isAdmin}
+                user={u}
                 currentUser={currentUser}
-                selectedUsers={selectedUsers}
+                isSelected={selectedUsers.has(u.id)}
                 isDeleting={isDeleting}
-                onEdit={(user) => setModal(user)}
-                onDelete={(user) => { if (confirm(`Delete ${user.full_name}?`)) deleteMutation.mutate(user.id) }}
+                isAdmin={isAdmin}
                 onToggleSelect={toggleSelectUser}
+                onEdit={setModal}
+                onDelete={(id) => deleteMutation.mutate(id)}
               />
             ))}
           </tbody>

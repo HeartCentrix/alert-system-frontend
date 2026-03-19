@@ -3,6 +3,51 @@
  * user-friendly strings for display.
  */
 
+// Error type to message mapper
+const ERROR_TYPE_MESSAGES = {
+  // String validation
+  string_pattern_mismatch: (field) => `${field} has an invalid format`,
+  string_too_short: (field) => `${field} is too short`,
+  string_too_long: (field) => `${field} is too long`,
+
+  // Numeric validation
+  greater_than: (field) => `${field} must be greater than the allowed value`,
+  less_than: (field) => `${field} must be less than the allowed value`,
+  greater_than_equal: (field) => `${field} must be at least the minimum value`,
+  less_than_equal: (field) => `${field} must be at most the maximum value`,
+
+  // Type validation
+  float_type: (field) => `${field} must be a number`,
+  int_type: (field) => `${field} must be an integer`,
+  bool_type: (field) => `${field} must be true or false`,
+  list_type: (field) => `${field} must be a list`,
+  dict_type: (field) => `${field} must be an object`,
+  string_type: (field) => `${field} must be text`,
+
+  // Required/missing
+  missing: (field) => `${field} is required`,
+
+  // Length
+  too_short: (field) => `${field} is too short`,
+  too_long: (field) => `${field} is too long`,
+}
+
+/**
+ * Extract field name from error location
+ */
+function extractFieldName(loc) {
+  if (!Array.isArray(loc) || loc.length === 0) return 'Field'
+  const fieldName = loc[loc.length - 1]
+  return fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
+}
+
+/**
+ * Get email validation message
+ */
+function getEmailError(msg) {
+  return msg?.includes('email') ? 'must be a valid email address' : 'has an invalid value'
+}
+
 /**
  * @param {Object} errorItem
  * @returns {string}
@@ -12,138 +57,76 @@ function normalizePydanticError(errorItem) {
     return String(errorItem || 'An unexpected error occurred')
   }
 
-  const { type, loc, msg, input } = errorItem
-
-  // Extract field name from location array
-  // loc is typically ["body", "field_name"] or just ["field_name"]
-  let fieldName = 'Field'
-  if (Array.isArray(loc) && loc.length > 0) {
-    // Get the last part which is usually the field name
-    fieldName = loc[loc.length - 1]
-    // Capitalize first letter
-    fieldName = fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
-  }
-
-  // Map common Pydantic error types to user-friendly messages
-  const errorTypeMessages = {
-    // String validation
-    string_pattern_mismatch: (field) => `${field} has an invalid format`,
-    string_too_short: (field) => `${field} is too short`,
-    string_too_long: (field) => `${field} is too long`,
-    
-    // Numeric validation
-    greater_than: (field) => `${field} must be greater than the allowed value`,
-    less_than: (field) => `${field} must be less than the allowed value`,
-    greater_than_equal: (field) => `${field} must be at least the minimum value`,
-    less_than_equal: (field) => `${field} must be at most the maximum value`,
-    
-    // Type validation
-    float_type: (field) => `${field} must be a number`,
-    int_type: (field) => `${field} must be an integer`,
-    bool_type: (field) => `${field} must be true or false`,
-    list_type: (field) => `${field} must be a list`,
-    dict_type: (field) => `${field} must be an object`,
-    string_type: (field) => `${field} must be text`,
-    
-    // Required/missing
-    missing: (field) => `${field} is required`,
-    
-    // Email
-    value_error: (field, ctx) => {
-      if (msg?.includes('email')) return `${field} must be a valid email address`
-      return `${field} has an invalid value`
-    },
-    
-    // Length
-    too_short: (field) => `${field} is too short`,
-    too_long: (field) => `${field} is too long`,
-  }
+  const { type, loc, msg } = errorItem
+  const fieldName = extractFieldName(loc)
 
   // Try to get a friendly message based on error type
-  const typeMapper = errorTypeMessages[type]
+  const typeMapper = ERROR_TYPE_MESSAGES[type]
   if (typeMapper) {
-    return typeMapper(fieldName, errorItem.ctx)
+    return typeMapper(fieldName)
+  }
+
+  // Handle value_error (email validation)
+  if (type === 'value_error') {
+    return `${fieldName} ${getEmailError(msg)}`
   }
 
   // If we have a msg field, use it but sanitize it
-  // Remove technical details that shouldn't be shown to users
   if (msg) {
-    // Remove regex patterns and internal details
-    let cleanMsg = msg
+    const cleanMsg = msg
       .replace(/regex pattern ['"]?[^'"]*['"]?/gi, 'format')
       .replace(/pattern ['"]?[^'"]*['"]?/gi, 'format')
       .replace(/should match ['"]?[^'"]*['"]?/gi, 'have the correct format')
-    
-    // If msg already contains field info, use it directly
+
     if (cleanMsg.toLowerCase().includes(fieldName.toLowerCase())) {
       return cleanMsg
     }
-    
+
     return `${fieldName}: ${cleanMsg}`
   }
 
-  // Fallback: generic message with field name
   return `${fieldName} is invalid`
 }
 
-// ── Individual format extractors ──────────────────────────────────────────────
+/**
+ * Extract and normalize error messages from an API error response.
+ */
+export function normalizeApiError(error) {
+  const defaultResponse = {
+    title: undefined,
+    messages: ['An unexpected error occurred. Please try again.'],
+  }
 
-function extractFromStringError(error) {
-  if (typeof error === 'string') {
-    return { messages: [error || 'An error occurred'] }
+  if (!error) return defaultResponse
+  if (typeof error === 'string') return { messages: [error || 'An error occurred'] }
+
+  const data = error?.response?.data || error?.detail || error
+  if (typeof data === 'string') return { messages: [data] }
+  if (data?.detail && typeof data.detail === 'string') return { messages: [data.detail] }
+
+  // Handle validation errors (Pydantic/FastAPI)
+  if (Array.isArray(data?.detail)) {
+    const messages = data.detail.map(normalizePydanticError).filter(Boolean)
+    if (messages.length > 0) return { title: 'Validation Error', messages }
   }
   return null
 }
 
-function extractFromStringData(data) {
-  if (typeof data === 'string') {
-    return { messages: [data] }
+  // Handle { errors: [...] } format
+  if (Array.isArray(data?.errors)) {
+    const messages = data.errors.map(normalizeErrorItem).filter(Boolean)
+    if (messages.length > 0) return { title: 'Validation Error', messages }
   }
   return null
 }
 
-function extractFromDetailString(data) {
-  if (data?.detail && typeof data.detail === 'string') {
-    return { messages: [data.detail] }
-  }
-  return null
-}
-
-function extractFromDetailArray(data) {
-  if (!Array.isArray(data?.detail)) return null
-  const messages = data.detail
-    .map((err) => normalizePydanticError(err))
-    .filter((msg) => msg && msg.length > 0)
-  if (messages.length > 0) {
-    return { title: 'Validation Error', messages }
-  }
-  return null
-}
-
-function normalizeErrorsItem(err) {
-  if (err.type || err.loc) return normalizePydanticError(err)
-  if (typeof err.message === 'string') return err.message
-  return normalizePydanticError(err)
-}
-
-function extractFromErrorsArray(data) {
-  if (!Array.isArray(data?.errors)) return null
-  const messages = data.errors
-    .map(normalizeErrorsItem)
-    .filter((msg) => msg && msg.length > 0)
-  if (messages.length > 0) {
-    return { title: 'Validation Error', messages }
-  }
-  return null
-}
-
-function extractFromMessage(data) {
-  if (!data?.message) return null
-  if (Array.isArray(data.message)) {
-    return { messages: data.message.filter((msg) => msg && typeof msg === 'string') }
-  }
-  if (typeof data.message === 'string') {
-    return { messages: [data.message] }
+  // Handle { message: "..." } format
+  if (data?.message) {
+    const msg = data.message
+    if (Array.isArray(msg)) {
+      return { messages: msg.filter(m => m && typeof m === 'string') }
+    }
+    if (typeof msg === 'string') return { messages: [msg] }
   }
   return null
 }
@@ -155,19 +138,46 @@ function extractFromErrorField(data) {
   return null
 }
 
-function extractFromNetworkError(error) {
-  if (error?.code === 'ECONNREFUSED') {
-    return {
+  // Handle network errors
+  const networkError = getNetworkErrorMessage(error)
+  if (networkError) return networkError
+
+  // Fallback: extract any string property
+  if (data && typeof data === 'object') {
+    for (const key of ['detail', 'message', 'error', 'errorMessage', 'errorMsg']) {
+      if (data[key] && typeof data[key] === 'string') {
+        return { messages: [data[key]] }
+      }
+    }
+  }
+
+  return defaultResponse
+}
+
+// Normalize individual error item from errors array
+function normalizeErrorItem(err) {
+  if (err.type || err.loc) return normalizePydanticError(err)
+  if (typeof err.message === 'string') return err.message
+  return normalizePydanticError(err)
+}
+
+// Get network error message
+function getNetworkErrorMessage(error) {
+  const networkErrors = {
+    ECONNREFUSED: {
       title: 'Connection Error',
       messages: ['Unable to connect to the server. Please check your connection and try again.'],
-    }
-  }
-  if (error?.code === 'ENOTFOUND') {
-    return {
+    },
+    ENOTFOUND: {
       title: 'Network Error',
       messages: ['Cannot reach the server. Please check your network connection.'],
-    }
+    },
   }
+
+  if (error?.code && networkErrors[error.code]) {
+    return networkErrors[error.code]
+  }
+
   if (error?.request && !error?.response) {
     return {
       title: 'Network Error',
@@ -177,51 +187,7 @@ function extractFromNetworkError(error) {
   return null
 }
 
-function extractFromObjectFallback(data) {
-  if (!data || typeof data !== 'object') return null
-  const possibleMessages = ['detail', 'message', 'error', 'errorMessage', 'errorMsg']
-  for (const key of possibleMessages) {
-    if (data[key] && typeof data[key] === 'string') {
-      return { messages: [data[key]] }
-    }
-  }
   return null
-}
-
-/**
- * Extract and normalize error messages from an API error response.
- * 
- * Handles multiple error response formats:
- * - FastAPI/Pydantic: { detail: [...] } or { detail: "string" }
- * - Generic: { message: "..." } or { error: "..." }
- * - Array of errors: { errors: [...] }
- * - Plain string errors
- * 
- * @param {Object} error - The caught error object (from axios/fetch)
- * @returns {{ title?: string, messages: string[] }} - Normalized error with optional title and message list
- */
-export function normalizeApiError(error) {
-  const defaultResponse = {
-    title: undefined,
-    messages: ['An unexpected error occurred. Please try again.'],
-  }
-
-  if (!error) return defaultResponse
-
-  const data = error?.response?.data || error?.detail || error
-
-  return (
-    extractFromStringError(error) ||
-    extractFromStringData(data) ||
-    extractFromDetailString(data) ||
-    extractFromDetailArray(data) ||
-    extractFromErrorsArray(data) ||
-    extractFromMessage(data) ||
-    extractFromErrorField(data) ||
-    extractFromNetworkError(error) ||
-    extractFromObjectFallback(data) ||
-    defaultResponse
-  )
 }
 
 /**
