@@ -718,7 +718,7 @@ export default function PeoplePage() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['users', page, search],
-    queryFn: () => usersAPI.list({ page, page_size: 20, search: search || undefined }).then(r => r.data),
+    queryFn: () => usersAPI.list({ page, page_size: 10, search: search || undefined }).then(r => r.data),
     refetchInterval: isVisible ? 10000 : false, // Refresh every 10s when visible for real-time status
     refetchIntervalInBackground: true, // Also refresh when tab is in background
     refetchOnWindowFocus: true,
@@ -840,7 +840,7 @@ export default function PeoplePage() {
 
   const users = data?.items || []
   const total = data?.total || 0
-  const totalPages = Math.ceil(total / 20)
+  const totalPages = Math.ceil(total / 10)
   const allSelected = users.length > 0 && selectedUsers.size === users.length
   const someSelected = selectedUsers.size > 0 && selectedUsers.size < users.length
 
@@ -961,7 +961,7 @@ export default function PeoplePage() {
         {totalPages > 1 && (
           <div className="px-4 sm:px-5 py-3 border-t border-surface-700/40 flex flex-col sm:flex-row items-center gap-3 sm:gap-0 justify-between">
             <span className="text-xs text-slate-500 text-center sm:text-left">
-              Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, total)} of {total}
+              Showing {((page - 1) * 10) + 1}–{Math.min(page * 10, total)} of {total}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => setPage(p => p - 1)} disabled={page === 1} className="btn-ghost py-1 px-2">

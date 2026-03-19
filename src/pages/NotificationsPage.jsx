@@ -210,6 +210,9 @@ export function NotificationDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const isVisible = useIsDocumentVisible()
+  const [deliveryPage, setDeliveryPage] = useState(1)
+  const [responsePage, setResponsePage] = useState(1)
+  const PAGE_SIZE = 10
 
   const { data: notification, refetch } = useQuery({
     queryKey: ['notification', id],
@@ -235,9 +238,9 @@ export function NotificationDetailPage() {
       toast.success('Notification cancelled')
       refetch()
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 
-                          (typeof error.response?.data?.detail === 'object' 
-                            ? error.response.data.detail.message 
+      const errorMessage = error.response?.data?.detail ||
+                          (typeof error.response?.data?.detail === 'object'
+                            ? error.response.data.detail.message
                             : 'Cannot cancel this notification')
       toast.error(errorMessage || 'Cannot cancel this notification')
     }
@@ -247,6 +250,26 @@ export function NotificationDetailPage() {
 
   const stats = notification.delivery_stats || {}
   const respStats = notification.response_stats || {}
+
+  // Paginate delivery logs
+  const deliveryLogs = delivery || []
+  const deliveryTotalPages = Math.ceil(deliveryLogs.length / PAGE_SIZE) || 1
+  const deliveryCurrentPage = Math.min(deliveryPage, deliveryTotalPages)
+  const paginatedDelivery = deliveryLogs.slice((deliveryCurrentPage - 1) * PAGE_SIZE, deliveryCurrentPage * PAGE_SIZE)
+
+  // Paginate recipient responses
+  const userDeliveriesMap = {}
+  deliveryLogs.forEach(log => {
+    const key = log.user_id || log.user_email
+    if (!userDeliveriesMap[key]) {
+      userDeliveriesMap[key] = { name: log.user_name, email: log.user_email, logs: [] }
+    }
+    userDeliveriesMap[key].logs.push(log)
+  })
+  const userDeliveryEntries = Object.entries(userDeliveriesMap)
+  const responseTotalPages = Math.ceil(userDeliveryEntries.length / PAGE_SIZE) || 1
+  const responseCurrentPage = Math.min(responsePage, responseTotalPages)
+  const paginatedUserDeliveries = userDeliveryEntries.slice((responseCurrentPage - 1) * PAGE_SIZE, responseCurrentPage * PAGE_SIZE)
 
   const pieData = [
     { name: 'Safe', value: respStats.safe || 0, color: '#22c55e' },
@@ -301,7 +324,7 @@ export function NotificationDetailPage() {
           <div className="card overflow-hidden">
             <div className="px-5 py-3 border-b border-surface-700/40">
               <h3 className="text-sm font-semibold text-white">Delivery Log</h3>
-              <p className="text-xs text-slate-500">{delivery?.length || 0} entries</p>
+              <p className="text-xs text-slate-500">{deliveryLogs.length} entries</p>
             </div>
             <div className="max-h-72 overflow-auto">
               <table className="w-full min-w-[500px]">
@@ -314,7 +337,7 @@ export function NotificationDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {delivery?.map(log => (
+                  {paginatedDelivery?.map(log => (
                     <tr key={log.id} className="table-row text-sm">
                       <td className="px-4 py-2 text-slate-300 whitespace-nowrap">{log.user_name || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{channelIcon(log.channel)} {channelLabel(log.channel)}</td>
@@ -329,12 +352,30 @@ export function NotificationDetailPage() {
                       <td className="px-3 py-2 text-xs text-slate-500 font-mono whitespace-nowrap">{maskPII(log.to_address)}</td>
                     </tr>
                   ))}
-                  {!delivery?.length && (
+                  {!paginatedDelivery?.length && (
                     <tr><td colSpan={4} className="text-center py-8 text-slate-500 text-sm">No delivery logs yet</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination */}
+            {deliveryTotalPages > 1 && (
+              <div className="px-4 sm:px-5 py-3 border-t border-surface-700/40 flex items-center justify-between">
+                <span className="text-xs text-slate-500">
+                  Showing {((deliveryCurrentPage - 1) * PAGE_SIZE) + 1}–{Math.min(deliveryCurrentPage * PAGE_SIZE, deliveryLogs.length)} of {deliveryLogs.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setDeliveryPage(p => p - 1)} disabled={deliveryCurrentPage === 1} className="btn-ghost py-1 px-2">
+                    <ChevronLeft size={14} /> <span className="hidden xs:inline">Previous</span>
+                  </button>
+                  <span className="text-sm text-slate-400 px-2">{deliveryCurrentPage} / {deliveryTotalPages}</span>
+                  <button onClick={() => setDeliveryPage(p => p + 1)} disabled={deliveryCurrentPage >= deliveryTotalPages} className="btn-ghost py-1 px-2">
+                    <span className="hidden xs:inline">Next</span> <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -432,27 +473,13 @@ export function NotificationDetailPage() {
                       const userResponses = {}
                       responses?.forEach(r => {
                         const key = r.user_id || r.user_email
-                        console.log('Response:', r)
                         if (!userResponses[key] || new Date(r.responded_at) > new Date(userResponses[key].responded_at)) {
                           userResponses[key] = r
                         }
                       })
 
-                      // Group delivery logs by user
-                      const userDeliveries = {}
-                      delivery.forEach(log => {
-                        const key = log.user_id || log.user_email
-                        console.log('Delivery:', log)
-                        if (!userDeliveries[key]) {
-                          userDeliveries[key] = { name: log.user_name, email: log.user_email, logs: [] }
-                        }
-                        userDeliveries[key].logs.push(log)
-                      })
-                      
-                      console.log('userResponses:', userResponses)
-                      console.log('userDeliveries:', userDeliveries)
-                      
-                      return Object.entries(userDeliveries).map(([key, userData]) => {
+                      // Use pre-computed paginated user deliveries
+                      return paginatedUserDeliveries.map(([key, userData]) => {
                         const response = userResponses[key]
                         const hasResponded = !!response
                         return (
@@ -487,6 +514,25 @@ export function NotificationDetailPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination */}
+              {responseTotalPages > 1 && (
+                <div className="px-4 sm:px-5 py-3 border-t border-surface-700/40 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
+                    Showing {((responseCurrentPage - 1) * PAGE_SIZE) + 1}–{Math.min(responseCurrentPage * PAGE_SIZE, userDeliveryEntries.length)} of {userDeliveryEntries.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setResponsePage(p => p - 1)} disabled={responseCurrentPage === 1} className="btn-ghost py-1 px-2">
+                      <ChevronLeft size={14} /> <span className="hidden xs:inline">Previous</span>
+                    </button>
+                    <span className="text-sm text-slate-400 px-2">{responseCurrentPage} / {responseTotalPages}</span>
+                    <button onClick={() => setResponsePage(p => p + 1)} disabled={responseCurrentPage >= responseTotalPages} className="btn-ghost py-1 px-2">
+                      <span className="hidden xs:inline">Next</span> <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {!delivery?.length && (
                 <div className="text-center py-4 text-slate-500 text-sm">No delivery logs yet</div>
               )}
