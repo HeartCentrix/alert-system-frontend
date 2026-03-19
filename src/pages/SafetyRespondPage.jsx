@@ -40,6 +40,11 @@ export default function SafetyRespondPage() {
     setError(null)
 
     try {
+      // Detect channel from URL or default to email
+      // Email links: /notifications/:id/respond?token=xxx&channel=email
+      // SMS links: /notifications/:id/respond?token=xxx&channel=sms
+      const urlChannel = searchParams.get('channel') || 'email'
+
       // Call backend notifications respond endpoint with token
       // This matches the reference v1.0.0 implementation
       await api.post(`/notifications/${id}/respond`, {
@@ -47,7 +52,8 @@ export default function SafetyRespondPage() {
         message: ''
       }, {
         params: {
-          token: token // Pass the check-in token from URL
+          token: token, // Pass the check-in token from URL
+          channel: urlChannel // Pass channel (email or sms)
         }
       })
 
