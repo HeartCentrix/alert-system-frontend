@@ -460,6 +460,47 @@ function BulkDeleteModal({ selectedUsers, allUsers, onClose, onConfirmed }) {
   )
 }
 
+// Get badge class based on user role
+function getRoleBadgeClass(role) {
+  const roleClasses = {
+    super_admin: 'badge-red',
+    admin: 'badge-orange',
+    manager: 'badge-blue',
+  }
+  return roleClasses[role] || 'badge-gray'
+}
+
+// Get status badge class based on active state
+function getStatusBadgeClass(isActive) {
+  return isActive ? 'badge-green' : 'badge-red'
+}
+
+// Get button className based on user state
+function getActionButtonClass(isSelf, isDeleting) {
+  if (isSelf || isDeleting) return "text-slate-700 cursor-not-allowed"
+  return "text-slate-500 hover:text-danger-400"
+}
+
+// Get button title based on user state
+function getActionButtonTitle(isSelf, isDeleting) {
+  if (isSelf) return "You cannot delete yourself"
+  if (isDeleting) return "Deleting..."
+  return "Delete"
+}
+
+// Render delete icon or spinner
+function DeleteIcon({ isDeleting }) {
+  if (isDeleting) {
+    return (
+      <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+    )
+  }
+  return <Trash2 size={14} />
+}
+
 // Table row component for user display
 function UserTableRow({ user, currentUser, isSelected, isDeleting, isAdmin, onToggleSelect, onEdit, onDelete }) {
   const isSelf = user.id === currentUser?.id
@@ -498,15 +539,12 @@ function UserTableRow({ user, currentUser, isSelected, isDeleting, isAdmin, onTo
       </td>
       <td className="px-5 py-3.5 text-sm text-slate-400">{user.department || '—'}</td>
       <td className="px-5 py-3.5">
-        <span className={cn(
-          'badge',
-          user.role === 'super_admin' ? 'badge-red' :
-          user.role === 'admin' ? 'badge-orange' :
-          user.role === 'manager' ? 'badge-blue' : 'badge-gray'
-        )}>{user.role?.replaceAll('_', ' ')}</span>
+        <span className={cn('badge', getRoleBadgeClass(user.role))}>
+          {user.role?.replaceAll('_', ' ')}
+        </span>
       </td>
       <td className="px-5 py-3.5">
-        <span className={user.is_active ? 'badge-green' : 'badge-red'}>
+        <span className={getStatusBadgeClass(user.is_active)}>
           {user.is_active ? 'Active' : 'Inactive'}
         </span>
       </td>
@@ -524,22 +562,10 @@ function UserTableRow({ user, currentUser, isSelected, isDeleting, isAdmin, onTo
               if (confirm(`Delete ${user.full_name}?`)) onDelete(user.id)
             }}
             disabled={isSelf || isDeleting(user.id)}
-            className={cn(
-              "p-1.5 transition-colors",
-              isSelf || isDeleting(user.id)
-                ? "text-slate-700 cursor-not-allowed"
-                : "text-slate-500 hover:text-danger-400"
-            )}
-            title={isSelf ? "You cannot delete yourself" : isDeleting(user.id) ? "Deleting..." : "Delete"}
+            className={cn("p-1.5 transition-colors", getActionButtonClass(isSelf, isDeleting(user.id)))}
+            title={getActionButtonTitle(isSelf, isDeleting(user.id))}
           >
-            {isDeleting(user.id) ? (
-              <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <Trash2 size={14} />
-            )}
+            <DeleteIcon isDeleting={isDeleting(user.id)} />
           </button>
         </div>
       </td>

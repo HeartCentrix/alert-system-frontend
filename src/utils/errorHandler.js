@@ -106,22 +106,23 @@ export function normalizeApiError(error) {
 
   // Handle validation errors (Pydantic/FastAPI)
   if (Array.isArray(data?.detail)) {
-    const messages = data.detail.map(err => normalizePydanticError(err)).filter(msg => msg)
+    const messages = data.detail.map(normalizePydanticError).filter(Boolean)
     if (messages.length > 0) return { title: 'Validation Error', messages }
   }
 
   // Handle { errors: [...] } format
   if (Array.isArray(data?.errors)) {
-    const messages = data.errors.map(normalizeErrorItem).filter(msg => msg)
+    const messages = data.errors.map(normalizeErrorItem).filter(Boolean)
     if (messages.length > 0) return { title: 'Validation Error', messages }
   }
 
   // Handle { message: "..." } format
   if (data?.message) {
-    if (Array.isArray(data.message)) {
-      return { messages: data.message.filter(msg => msg && typeof msg === 'string') }
+    const msg = data.message
+    if (Array.isArray(msg)) {
+      return { messages: msg.filter(m => m && typeof m === 'string') }
     }
-    if (typeof data.message === 'string') return { messages: [data.message] }
+    if (typeof msg === 'string') return { messages: [msg] }
   }
 
   // Handle { error: "..." } format
