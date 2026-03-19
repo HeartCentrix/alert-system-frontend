@@ -131,6 +131,38 @@ function UserProfileCollapsed({ user, onLogout }) {
   )
 }
 
+// Sidebar toggle button component
+function SidebarToggleButton({ sidebarOpen, onToggle }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onToggle}
+            className={cn(
+              'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
+              'w-11 h-11 min-w-[44px] min-h-[44px]',
+              'rounded-lg',
+              'bg-surface-900 border border-surface-700/60',
+              'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
+              'active:bg-surface-700 active:text-white',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
+              'transition-all duration-200 ease-in-out',
+              'shadow-lg'
+            )}
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            {sidebarOpen ? <ChevronLeft size={20} strokeWidth={2} /> : <ChevronRight size={20} strokeWidth={2} />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
+          {sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
@@ -162,32 +194,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onCollapse }) 
       )}
 
       {/* Toggle Button - Outside sidebar at top-right (desktop and mobile) */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={toggleSidebar}
-              className={cn(
-                'absolute -right-11 top-0 z-20 flex items-center justify-center shrink-0',
-                'w-11 h-11 min-w-[44px] min-h-[44px]',
-                'rounded-lg',
-                'bg-surface-900 border border-surface-700/60',
-                'text-slate-400 hover:text-slate-200 hover:bg-surface-800',
-                'active:bg-surface-700 active:text-white',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
-                'transition-all duration-200 ease-in-out',
-                'shadow-lg'
-              )}
-              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              {sidebarOpen ? <ChevronLeft size={20} strokeWidth={2} /> : <ChevronRight size={20} strokeWidth={2} />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="bg-surface-800 border-surface-700 text-slate-200">
-            {sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <SidebarToggleButton sidebarOpen={sidebarOpen} onToggle={toggleSidebar} />
 
       {/* Sidebar */}
       <aside className={cn(

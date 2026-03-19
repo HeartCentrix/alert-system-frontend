@@ -185,10 +185,30 @@ export function useLocationAutocomplete(options = {}) {
 
   // ── Fetch with rate limiting ───────────────────────────────────────
 
+  // Handle fetch errors and set appropriate error message
+  const handleFetchError = useCallback((err) => {
+    if (err.name === 'AbortError' || err.name === 'CanceledError') {
+      return
+    }
+
+    console.error('Location autocomplete error:', err)
+
+    const errorMessages = {
+      429: 'Too many requests. Please wait a moment.',
+      503: 'Location service temporarily unavailable.',
+    }
+
+    const status = err.response?.status
+    const message = errorMessages[status] || err.response?.data?.detail || 'Failed to fetch location suggestions.'
+    
+    setError(message)
+    setResults([])
+  }, [])
+
   const fetchResults = useCallback(async (searchQuery) => {
     const cacheKey = getCacheKey(searchQuery)
 
-    // Check L0/L1 cache (instant, no network)
+    // Check cache first (instant, no network)
     const cached = getFromCache(cacheKey)
     if (cached) {
       setResults(cached)
@@ -197,7 +217,7 @@ export function useLocationAutocomplete(options = {}) {
       return
     }
 
-    // Deduplicate: if there's already a pending request, wait for it
+    // Deduplicate pending requests
     if (pendingRequestRef.current) {
       try {
         const pendingResults = await pendingRequestRef.current
@@ -209,19 +229,18 @@ export function useLocationAutocomplete(options = {}) {
       return
     }
 
-    // Rate limiting: enforce minimum time between API calls
+    // Rate limiting
     const now = Date.now()
     const timeSinceLastRequest = now - lastRequestTimeRef.current
     if (timeSinceLastRequest < minRequestInterval) {
-      const delay = minRequestInterval - timeSinceLastRequest
-      await new Promise(resolve => setTimeout(resolve, delay))
+      await new Promise(resolve => setTimeout(resolve, minRequestInterval - timeSinceLastRequest))
     }
 
     lastRequestTimeRef.current = Date.now()
     setLoading(true)
     setError(null)
 
-    // Cancel any in-flight request
+    // Cancel in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
@@ -236,35 +255,16 @@ export function useLocationAutocomplete(options = {}) {
       })
 
       const fetchedResults = data.results || []
-
-      // Cache permanently (both non-empty and empty results)
       setCache(cacheKey, fetchedResults)
-
       setResults(fetchedResults)
       setError(null)
     } catch (err) {
-      if (err.name === 'AbortError' || err.name === 'CanceledError') {
-        return
-      }
-
-      console.error('Location autocomplete error:', err)
-
-      if (err.response?.status === 429) {
-        setError('Too many requests. Please wait a moment.')
-      } else if (err.response?.status === 503) {
-        setError('Location service temporarily unavailable.')
-      } else if (err.response?.status === 400) {
-        setError(err.response?.data?.detail || 'Invalid search query.')
-      } else {
-        setError('Failed to fetch location suggestions.')
-      }
-
-      setResults([])
+      handleFetchError(err)
     } finally {
       setLoading(false)
       pendingRequestRef.current = null
     }
-  }, [getCacheKey, getFromCache, setCache, limit, countrycodes, viewbox, bounded, minRequestInterval])
+  }, [getCacheKey, getFromCache, setCache, handleFetchError, limit, countrycodes, viewbox, bounded, minRequestInterval])
 
   // ── Debounced query watcher ────────────────────────────────────────
 

@@ -90,15 +90,6 @@ function normalizePydanticError(errorItem) {
 
 /**
  * Extract and normalize error messages from an API error response.
- *
- * Handles multiple error response formats:
- * - FastAPI/Pydantic: { detail: [...] } or { detail: "string" }
- * - Generic: { message: "..." } or { error: "..." }
- * - Array of errors: { errors: [...] }
- * - Plain string errors
- *
- * @param {Object} error - The caught error object (from axios/fetch)
- * @returns {{ title?: string, messages: string[] }} - Normalized error with optional title and message list
  */
 export function normalizeApiError(error) {
   const defaultResponse = {
@@ -110,11 +101,10 @@ export function normalizeApiError(error) {
   if (typeof error === 'string') return { messages: [error || 'An error occurred'] }
 
   const data = error?.response?.data || error?.detail || error
-
   if (typeof data === 'string') return { messages: [data] }
   if (data?.detail && typeof data.detail === 'string') return { messages: [data.detail] }
 
-  // Handle Pydantic/FastAPI validation errors
+  // Handle validation errors (Pydantic/FastAPI)
   if (Array.isArray(data?.detail)) {
     const messages = data.detail.map(err => normalizePydanticError(err)).filter(msg => msg)
     if (messages.length > 0) return { title: 'Validation Error', messages }
@@ -122,13 +112,7 @@ export function normalizeApiError(error) {
 
   // Handle { errors: [...] } format
   if (Array.isArray(data?.errors)) {
-    const messages = data.errors
-      .map(err => {
-        if (err.type || err.loc) return normalizePydanticError(err)
-        if (typeof err.message === 'string') return err.message
-        return normalizePydanticError(err)
-      })
-      .filter(msg => msg)
+    const messages = data.errors.map(normalizeErrorItem).filter(msg => msg)
     if (messages.length > 0) return { title: 'Validation Error', messages }
   }
 
@@ -146,32 +130,12 @@ export function normalizeApiError(error) {
   }
 
   // Handle network errors
-  if (error?.code === 'ECONNREFUSED') {
-    return {
-      title: 'Connection Error',
-      messages: ['Unable to connect to the server. Please check your connection and try again.'],
-    }
-  }
+  const networkError = getNetworkErrorMessage(error)
+  if (networkError) return networkError
 
-  if (error?.code === 'ENOTFOUND') {
-    return {
-      title: 'Network Error',
-      messages: ['Cannot reach the server. Please check your network connection.'],
-    }
-  }
-
-  // Handle axios network error without response
-  if (error?.request && !error?.response) {
-    return {
-      title: 'Network Error',
-      messages: ['No response from server. Please check your internet connection.'],
-    }
-  }
-
-  // Fallback: try to extract any meaningful message
+  // Fallback: extract any string property
   if (data && typeof data === 'object') {
-    const possibleMessages = ['detail', 'message', 'error', 'errorMessage', 'errorMsg']
-    for (const key of possibleMessages) {
+    for (const key of ['detail', 'message', 'error', 'errorMessage', 'errorMsg']) {
       if (data[key] && typeof data[key] === 'string') {
         return { messages: [data[key]] }
       }
@@ -179,6 +143,40 @@ export function normalizeApiError(error) {
   }
 
   return defaultResponse
+}
+
+// Normalize individual error item from errors array
+function normalizeErrorItem(err) {
+  if (err.type || err.loc) return normalizePydanticError(err)
+  if (typeof err.message === 'string') return err.message
+  return normalizePydanticError(err)
+}
+
+// Get network error message
+function getNetworkErrorMessage(error) {
+  const networkErrors = {
+    ECONNREFUSED: {
+      title: 'Connection Error',
+      messages: ['Unable to connect to the server. Please check your connection and try again.'],
+    },
+    ENOTFOUND: {
+      title: 'Network Error',
+      messages: ['Cannot reach the server. Please check your network connection.'],
+    },
+  }
+
+  if (error?.code && networkErrors[error.code]) {
+    return networkErrors[error.code]
+  }
+
+  if (error?.request && !error?.response) {
+    return {
+      title: 'Network Error',
+      messages: ['No response from server. Please check your internet connection.'],
+    }
+  }
+
+  return null
 }
 
 /**
