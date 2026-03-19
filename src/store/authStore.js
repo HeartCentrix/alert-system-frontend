@@ -78,12 +78,22 @@ const clearAllSessionData = () => {
   })
 }
 
-// 2026 STANDARD: Explicit cleanup on tab close
-// This ensures tokens are cleared even if browser restores session
+// 2026 STANDARD: Explicit cleanup on tab close (NOT page reload)
+// Uses navigation type to distinguish reload vs close
 const registerBeforeUnloadHandler = () => {
-  const handleBeforeUnload = () => {
-    // Clear tokens on tab close (prevents session restoration attacks)
-    clearAllSessionData()
+  const handleBeforeUnload = (event) => {
+    // Check if this is a reload (navigation type is 'reload')
+    // or an actual tab/window close (navigation type is 'navigate' or undefined)
+    const navigationType = performance.getEntriesByType('navigation')[0]?.type
+    
+    // Only clear session on actual tab close, NOT on reload
+    // navigationType === 'reload' means user pressed F5 or Ctrl+R
+    // navigationType === 'navigate' or undefined means tab close or navigation away
+    if (navigationType !== 'reload') {
+      // Tab is being closed or navigating away - clear tokens
+      clearAllSessionData()
+    }
+    // For reloads, session storage persists automatically (which is what we want)
   }
 
   window.addEventListener('beforeunload', handleBeforeUnload)
@@ -97,7 +107,21 @@ const registerBeforeUnloadHandler = () => {
 // Helper: Initialize authentication with token refresh logic
 async function initializeAuth() {
   const persistedToken = getAccessToken()
-  
+
+  // 2026 STANDARD: Check if token exists AND is not expired
+  if (!persistedToken || isAccessTokenExpired()) {
+    // No token or token expired - clear session and require login
+    clearAllSessionData()
+    return {
+      accessToken: null,
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isInitializing: false,
+      sessionId: null
+    }
+  }
+
   try {
     // Try to fetch user with current token
     const { data } = await authAPI.me()
@@ -196,6 +220,9 @@ const useAuthStore = create((set, get) => ({
         get().startHeartbeat()
       }
     } catch (error) {
+      // Log error for debugging (production-safe)
+      console.error('[AuthStore] Initialization failed:', error?.message || error)
+      
       // Authentication failed - clear all session data
       clearAllSessionData()
       set({
