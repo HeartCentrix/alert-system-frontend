@@ -71,8 +71,14 @@ npm run build
 
 For Vercel:
 ```bash
+# Resolve the `__BACKEND_ORIGIN__` placeholder in vercel.json before deploy.
+# That placeholder is intentionally in the repo to avoid leaking the prod
+# backend hostname (security review finding D-C2).
+BACKEND_ORIGIN="https://your-backend.example.com"
+sed -i.bak "s|__BACKEND_ORIGIN__|${BACKEND_ORIGIN}|g" vercel.json && rm -f vercel.json.bak
+
 vercel --prod
-# Set: VITE_API_URL=https://your-backend.railway.app/api/v1
+# Set: VITE_API_URL=${BACKEND_ORIGIN}/api/v1
 ```
 
 ---
