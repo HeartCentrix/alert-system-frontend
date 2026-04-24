@@ -30,12 +30,16 @@ function clearAuthData() {
 }
 
 // ── Anti-forgery helper ─────────────────────────────────────────────────────
+// The CSRF token is cached in-module after the backend emits it via the
+// X-CSRF-Token response header (see the response interceptor below). We do
+// NOT read it from document.cookie — that path required the cookie to be
+// JS-readable (HttpOnly=false), and a cookie a single XSS can read is a
+// cookie a single XSS can steal (security review F-H1). With the header
+// contract, the cookie can stay HttpOnly.
 let _csrfToken = null
 
 function getCsrfToken() {
-  if (_csrfToken) return _csrfToken
-  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)
-  return match ? decodeURIComponent(match[1]) : null
+  return _csrfToken
 }
 
 const CSRF_METHODS = new Set(['post', 'put', 'patch', 'delete'])
