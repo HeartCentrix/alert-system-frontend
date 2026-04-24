@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { cn } from '@/utils/helpers'
 import { getPrimaryErrorMessage, getUserFacingErrorMessages } from '@/utils/errorHandler'
 import ModalPortal from '@/components/ui/ModalPortal'
+import { QRCodeSVG } from 'qrcode.react'
 
 /**
  * MFAManagementTab - Complete MFA lifecycle management component
@@ -805,16 +806,22 @@ function MFASetupStep({ qrCodeURI, secret, onVerify, onCancel, error, loading })
     await onVerify(code)
   }
 
-  const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeURI)}`
-
   return (
     <form onSubmit={handleSubmit} className="p-6">
       <h3 className="font-display font-semibold text-xl text-white mb-4">
         Scan QR Code
       </h3>
 
+      {/* Rendered locally — see MFASetupStep.jsx for rationale (F-C1). */}
       <div className="bg-slate-900/50 rounded-lg p-4 mb-4">
-        <img src={qrCodeImageUrl} alt="MFA QR Code" className="w-48 h-48 mx-auto rounded-lg bg-white p-2" />
+        <div className="w-48 h-48 mx-auto rounded-lg bg-white p-2 flex items-center justify-center">
+          <QRCodeSVG
+            value={qrCodeURI}
+            size={176}
+            level="M"
+            aria-label="MFA QR Code"
+          />
+        </div>
       </div>
 
       <div className="mb-4">
