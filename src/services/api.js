@@ -48,15 +48,16 @@ const CSRF_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 let refreshPromise = null
 
 // ── Request interceptor ──────────────────────────────────────────────────────
+// The access token is now an HttpOnly cookie (security review F-C2); the
+// browser attaches it automatically on same-origin / withCredentials
+// requests. JavaScript has no reason to forge an Authorization: Bearer
+// header from in-memory state — doing so is what previously required the
+// token to live in sessionStorage and created the XSS = ATO risk.
 api.interceptors.request.use((config) => {
-  const token = _getAuthStore?.()?.accessToken ?? null
-  if (token) config.headers.Authorization = `Bearer ${token}`
-
   if (CSRF_METHODS.has(config.method?.toLowerCase())) {
     const csrfToken = getCsrfToken()
     if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken
   }
-
   return config
 })
 
@@ -94,29 +95,20 @@ function handleExpiredSession() {
 }
 
 async function executeTokenRefresh() {
-  const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem('refresh_token') || null
-
+  // Refresh token is an HttpOnly cookie — withCredentials sends it, there
+  // is nothing to pass in the body (security review B-H1 / F-C2).
   const { data } = await axios.post(
     `${API_BASE}/auth/refresh`,
-    refreshToken ? { refresh_token: refreshToken } : {},
+    {},
     { withCredentials: true }
   )
-
-  _getAuthStore?.()?.setAccessToken?.(data.access_token)
-  if (data.refresh_token) {
-    sessionStorage.setItem('refresh_token', data.refresh_token)
-    _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
-  }
-
-  return { access_token: data.access_token, refresh_token: data.refresh_token }
+  return { access_token: data?.access_token, refresh_token: data?.refresh_token }
 }
 
-async function retryWithNewToken(original, tokens) {
-  const retryConfig = {
-    ...original,
-    headers: { ...original.headers, Authorization: `Bearer ${tokens.access_token}` },
-  }
-  return api.request(retryConfig)
+async function retryWithNewToken(original, _tokens) {
+  // Cookies were rotated by /auth/refresh; simply replay the original
+  // request and the browser will attach the new access_token cookie.
+  return api.request({ ...original })
 }
 
 // ── Response interceptor ─────────────────────────────────────────────────────
@@ -156,14 +148,13 @@ api.interceptors.response.use(
 
     original._retry = true
 
-    // Wait for any existing refresh request
+    // Wait for any existing refresh request — once it resolves, the new
+    // access_token cookie is already set on the browser, so replaying the
+    // original request succeeds without touching any header.
     if (refreshPromise) {
       try {
-        const tokens = await refreshPromise
-        if (tokens) {
-          original.headers.Authorization = `Bearer ${tokens.access_token}`
-          return api(original)
-        }
+        await refreshPromise
+        return api(original)
       } catch {
         // Fall through to reject
       }
@@ -174,48 +165,27 @@ api.interceptors.response.use(
     refreshPromise = refreshAccessToken()
 
     try {
-      const tokens = await refreshPromise
-      if (tokens) {
-        const retryConfig = {
-          ...original,
-          headers: {
-            ...original.headers,
-            Authorization: `Bearer ${tokens.access_token}`
-          }
-        }
-        return api.request(retryConfig)
-      }
+      await refreshPromise
+      return api.request({ ...original })
     } catch (refreshErr) {
       throw refreshErr
     }
-
-    throw err
   }
 )
 
-// Refresh access token using refresh token
+// Refresh access token using refresh token.
+// Both tokens are HttpOnly cookies now (security review F-C2) so the
+// browser handles them via withCredentials — there is nothing for this
+// function to persist. We still return the response body in case any
+// caller wants the expires_in hint, but session state lives in cookies.
 async function refreshAccessToken() {
   try {
-    const refreshToken = _getAuthStore?.()?.refreshToken || sessionStorage.getItem(SESSION_KEYS.REFRESH_TOKEN) || null
-
     const { data } = await axios.post(
       `${API_BASE}/auth/refresh`,
-      refreshToken ? { refresh_token: refreshToken } : {},
+      {},
       { withCredentials: true }
     )
-
-    // 2026 STANDARD: Save with expiry time
-    const expiresIn = data.expires_in || 3600
-    _getAuthStore?.()?.setAccessToken?.(data.access_token)
-    if (data.refresh_token) {
-      sessionStorage.setItem(SESSION_KEYS.REFRESH_TOKEN, data.refresh_token)
-      _getAuthStore?.()?.setRefreshToken?.(data.refresh_token)
-    }
-    // Store token expiry
-    const expiryTime = Date.now() + (expiresIn * 1000)
-    sessionStorage.setItem(SESSION_KEYS.TOKEN_EXPIRY, expiryTime.toString())
-
-    return { access_token: data.access_token, refresh_token: data.refresh_token }
+    return { access_token: data?.access_token, refresh_token: data?.refresh_token }
   } catch (refreshErr) {
     // Refresh failed — session fully expired
     const currentPath = window.location.pathname
@@ -243,10 +213,7 @@ export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   ldapLogin: (username, password) => api.post('/auth/ldap/login', { username, password }),
   logout: () => api.post('/auth/logout', {}),
-  refresh: (refreshToken) => api.post('/auth/refresh',
-    refreshToken ? { refresh_token: refreshToken } : {},
-    { withCredentials: true }
-  ),
+  refresh: () => api.post('/auth/refresh', {}, { withCredentials: true }),
   me: () => api.get('/auth/me'),
   getProviders: () => api.get('/auth/providers'),
   updateProfile: (data) => api.put('/auth/me', data),
