@@ -15,18 +15,17 @@ export default function ResetPasswordPage() {
 
   // Get reset parameter from URL ONCE on mount — avoid React Router searchParams dependency
   useEffect(() => {
-    // Use window.location directly - it's immediately available
+    // Use window.location directly - it's immediately available.
+    // Never log the URL or the token itself — reset tokens are password
+    // equivalents and can land in RUM tooling, browser extensions, and
+    // screen-shares (security review F-H2).
     const urlParams = new URLSearchParams(window.location.search)
     const foundToken = urlParams.get('token')
-    
-    console.log('ResetPasswordPage: URL =', window.location.href)
-    console.log('ResetPasswordPage: Token =', foundToken ? `${foundToken.substring(0, 20)}...` : null)
-    
+
     if (foundToken) {
       setToken(foundToken)
       setValidating(false)
     } else {
-      console.error('ResetPasswordPage: NO TOKEN FOUND - redirecting to login')
       toast.error('Invalid or missing reset token')
       navigate('/login', { replace: true })
     }
