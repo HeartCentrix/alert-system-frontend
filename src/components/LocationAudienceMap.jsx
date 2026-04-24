@@ -15,9 +15,16 @@ L.Icon.Default.mergeOptions({
 })
 
 // Custom icons
-const createLocationIcon = (count) => L.divIcon({
-  className: '',
-  html: `
+const createLocationIcon = (count) => {
+  // Coerce the API-supplied member count to an integer — if the payload
+  // were an attacker-controlled string it would otherwise be interpolated
+  // directly into L.divIcon's raw HTML, giving XSS. LocationMap.jsx
+  // already does this; mirror the defence here (security review F-M1).
+  const n = Math.max(0, Math.floor(Number(count) || 0))
+  const display = n > 99 ? '99+' : String(n)
+  return L.divIcon({
+    className: '',
+    html: `
     <div style="
       background: #2563eb;
       border: 3px solid #60a5fa;
@@ -36,13 +43,14 @@ const createLocationIcon = (count) => L.divIcon({
         font-size: 11px;
         font-weight: 700;
         line-height: 1;
-      ">${count > 99 ? '99+' : count}</span>
+      ">${display}</span>
     </div>
   `,
-  iconSize: [36, 36],
-  iconAnchor: [18, 36],
-  popupAnchor: [0, -38],
-})
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -38],
+  })
+}
 
 const createUserIcon = () => L.divIcon({
   className: '',
