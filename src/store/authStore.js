@@ -287,6 +287,31 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  // Called by AuthCallbackPage after SSO. The backend has set an HttpOnly
+  // refresh cookie; exchange it for an access token via /auth/refresh rather
+  // than reading tokens from the URL (security review F-C3 / B-C2).
+  completeSSOFromCookie: async () => {
+    try {
+      const { data } = await authAPI.refresh()
+      saveAccessToken(data.access_token, data.expires_in)
+      if (data.refresh_token) saveRefreshToken(data.refresh_token)
+      set({
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || get().refreshToken,
+        user: data.user,
+        isAuthenticated: true,
+        isLoading: false,
+      })
+      get().startHeartbeat()
+      return data
+    } catch (err) {
+      clearAccessToken()
+      clearRefreshToken()
+      set({ user: null, isAuthenticated: false, accessToken: null, refreshToken: null })
+      throw err
+    }
+  },
+
   ldapLogin: async (username, password) => {
     const { data } = await authAPI.ldapLogin(username, password)
     saveAccessToken(data.access_token)
