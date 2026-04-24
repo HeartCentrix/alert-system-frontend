@@ -73,12 +73,18 @@ export default function App() {
     // Request initial location and update geofence
     const updateGeofence = (position) => {
       const { latitude, longitude } = position.coords
-      
-      // SECURITY: Round coordinates to ~100m precision for privacy
-      // This prevents tracking exact location while still enabling geofence
+
+      // PRIVACY: Round coordinates to 3 decimal places, which is ~111 m at
+      // the equator and narrows (~cos(latitude)) at higher latitudes — for
+      // reference Phoenix ~94 m, Toronto ~83 m, London ~70 m. Sufficient
+      // precision for city-level geofencing; coarse enough that we are not
+      // shipping individual addresses to the server.
+      // TODO(F-M4): add a user-facing privacy toggle so employees can
+      // opt out of geofence collection entirely, and skip this heartbeat
+      // when the toggle is off.
       const roundedLat = Math.round(latitude * 1000) / 1000
       const roundedLon = Math.round(longitude * 1000) / 1000
-      
+
       // Silent update - don't await, don't show errors to user
       locationAudienceAPI.updateGeofence(roundedLat, roundedLon)
         .catch(err => {
