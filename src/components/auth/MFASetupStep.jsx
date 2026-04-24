@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Shield, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 
 /**
  * MFASetupStep - Displays QR code and OTP entry for first-time MFA setup
@@ -35,8 +36,10 @@ export default function MFASetupStep({ qrCodeURI, secret, onVerify, onCancel }) 
     }
   }
 
-  // Generate QR code image URL using Google Charts API
-  const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeURI)}`
+  // QR code is rendered locally. Previously the OTPAuth URI (which embeds the
+  // raw base32 TOTP secret) was sent to api.qrserver.com as a GET query
+  // parameter — a public service that could log or MITM the secret, giving a
+  // permanent MFA bypass. Security review finding F-C1.
 
   return (
     <div className="animate-fade-in">
@@ -56,11 +59,14 @@ export default function MFASetupStep({ qrCodeURI, secret, onVerify, onCancel }) 
       {/* QR Code */}
       <div className="bg-slate-800/50 rounded-xl p-6 mb-6">
         <div className="flex justify-center mb-4">
-          <img 
-            src={qrCodeImageUrl} 
-            alt="MFA QR Code"
-            className="w-48 h-48 rounded-lg bg-white p-2"
-          />
+          <div className="w-48 h-48 rounded-lg bg-white p-2 flex items-center justify-center">
+            <QRCodeSVG
+              value={qrCodeURI}
+              size={176}
+              level="M"
+              aria-label="MFA QR Code"
+            />
+          </div>
         </div>
         
         <div className="text-center text-sm text-slate-400 mb-4">

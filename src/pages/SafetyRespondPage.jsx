@@ -45,16 +45,15 @@ export default function SafetyRespondPage() {
       // SMS links: /notifications/:id/respond?token=xxx&channel=sms
       const urlChannel = searchParams.get('channel') || 'email'
 
-      // Call backend notifications respond endpoint with token
-      // This matches the reference v1.0.0 implementation
+      // Call backend notifications respond endpoint with token.
+      // The check-in token is sent in a header (not query param) so it
+      // doesn't land in access logs / Referer (security review F-H3).
       await api.post(`/notifications/${id}/respond`, {
         response_type: responseType,
         message: ''
       }, {
-        params: {
-          token: token, // Pass the check-in token from URL
-          channel: urlChannel // Pass channel (email or sms)
-        }
+        headers: token ? { 'X-Checkin-Token': token } : undefined,
+        params: { channel: urlChannel },
       })
 
       // Success - redirect to success page

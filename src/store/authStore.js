@@ -1,97 +1,61 @@
 import { create } from 'zustand'
 import { authAPI, usersAPI } from '@/services/api'
 
-// Simple session storage (no prefixes, no complex tracking)
-const saveRefreshToken = (token) => {
-  if (token) {
-    sessionStorage.setItem('refresh_token', token)
-  }
-}
-
-const getRefreshToken = () => {
-  return sessionStorage.getItem('refresh_token')
-}
-
+// Session tokens live in HttpOnly cookies now (security review F-C2); the
+// frontend no longer persists them, so the saveX / getX helpers below are
+// intentional no-ops kept only so older call sites don't have to be
+// rewritten. Any residual value in sessionStorage from a pre-F-C2 build
+// is also cleared on the first init() call.
+const saveRefreshToken = () => {}
+const getRefreshToken = () => null
 const clearRefreshToken = () => {
   sessionStorage.removeItem('refresh_token')
+  sessionStorage.removeItem('tm_refresh_token')
 }
-
-const saveAccessToken = (token, expiresIn = 3600) => {
-  if (token) {
-    sessionStorage.setItem('access_token', token)
-    // Store expiry timestamp for token refresh
-    const expiryTime = Date.now() + (expiresIn * 1000)
-    sessionStorage.setItem('access_token_expiry', expiryTime.toString())
-  }
-}
-
-const getAccessToken = () => {
-  return sessionStorage.getItem('access_token')
-}
-
+const saveAccessToken = () => {}
+const getAccessToken = () => null
 const clearAccessToken = () => {
   sessionStorage.removeItem('access_token')
   sessionStorage.removeItem('access_token_expiry')
+  sessionStorage.removeItem('tm_access_token')
+  sessionStorage.removeItem('tm_token_expiry')
 }
 
-// Clear all session data
 const clearAllSessionData = () => {
   clearAccessToken()
   clearRefreshToken()
   sessionStorage.removeItem('user')
 }
 
-// Check if access token is expired
-const isAccessTokenExpired = () => {
-  const expiry = sessionStorage.getItem('access_token_expiry')
-  if (!expiry) return true
-  
-  const expiryTime = parseInt(expiry, 10)
-  const now = Date.now()
-  
-  // Consider token expired if within 30 seconds of expiry (buffer time)
-  return now >= (expiryTime - 30000)
-}
+// Expiry is tracked server-side via the access-token cookie's Max-Age; the
+// frontend just reacts to 401s. Always return false so legacy callers keep
+// trying the current session, at which point the response interceptor
+// refreshes or bounces to /login as appropriate.
+const isAccessTokenExpired = () => false
 
-// Helper: Initialize authentication with token refresh logic
-async function initializeAuth(set) {
-  const persistedToken = getAccessToken()
-  const isExpired = isAccessTokenExpired()
-
-  // Check if token exists AND is not expired
-  if (!persistedToken || isExpired) {
-    // No token or token expired - clear session and require login
-    clearAllSessionData()
-    return {
-      accessToken: null,
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-      isInitializing: false
-    }
-  }
+// Helper: Initialize authentication with token refresh logic.
+// The HttpOnly access/refresh cookies are opaque to JavaScript, so we can't
+// decide from the client whether to try /auth/me — we just try and let the
+// response interceptor drive refresh or logout based on the server answer.
+async function initializeAuth(_set) {
+  // Clear any lingering sessionStorage from pre-F-C2 builds.
+  clearAllSessionData()
 
   try {
-    // Try to fetch user with current token
     const { data } = await authAPI.me()
     return {
-      accessToken: persistedToken,
       user: data,
       isAuthenticated: true,
       isLoading: false,
-      isInitializing: false
+      isInitializing: false,
     }
-  } catch (error) {
-    // Handle 401/403 with token refresh
-    if (error?.response?.status === 401 || error?.response?.status === 403) {
-      const refreshResult = await handleTokenRefresh(set)
-      if (refreshResult) {
-        return refreshResult
-      }
+  } catch (_err) {
+    return {
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isInitializing: false,
     }
-    // Auth failed and refresh didn't work - clear session
-    clearAllSessionData()
-    throw error
   }
 }
 
@@ -238,15 +202,11 @@ const useAuthStore = create((set, get) => ({
       return data
     }
 
-    if (!data?.access_token) throw new Error('No token received from server')
+    if (!data?.user) throw new Error('No user data received from server')
 
-    // 2026 STANDARD: Save tokens with expiry time from backend
-    const expiresIn = data.expires_in || 3600 // Default 1 hour
-    saveAccessToken(data.access_token, expiresIn)
-    saveRefreshToken(data.refresh_token)
+    // Tokens land as HttpOnly cookies (security review F-C2); no client
+    // persistence needed. Just hold user info in memory for the UI.
     set({
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
       user: data.user,
       isAuthenticated: true,
       isLoading: false,
@@ -303,6 +263,31 @@ const useAuthStore = create((set, get) => ({
       get().startHeartbeat()
     } catch (err) {
       // Token invalid — clear everything
+      clearAccessToken()
+      clearRefreshToken()
+      set({ user: null, isAuthenticated: false, accessToken: null, refreshToken: null })
+      throw err
+    }
+  },
+
+  // Called by AuthCallbackPage after SSO. The backend has set an HttpOnly
+  // refresh cookie; exchange it for an access token via /auth/refresh rather
+  // than reading tokens from the URL (security review F-C3 / B-C2).
+  completeSSOFromCookie: async () => {
+    try {
+      const { data } = await authAPI.refresh()
+      saveAccessToken(data.access_token, data.expires_in)
+      if (data.refresh_token) saveRefreshToken(data.refresh_token)
+      set({
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || get().refreshToken,
+        user: data.user,
+        isAuthenticated: true,
+        isLoading: false,
+      })
+      get().startHeartbeat()
+      return data
+    } catch (err) {
       clearAccessToken()
       clearRefreshToken()
       set({ user: null, isAuthenticated: false, accessToken: null, refreshToken: null })

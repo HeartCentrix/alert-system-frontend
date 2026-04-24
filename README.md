@@ -72,7 +72,11 @@ npm run build
 For Vercel:
 ```bash
 vercel --prod
-# Set: VITE_API_URL=https://your-backend.railway.app/api/v1
+# Set: VITE_API_URL=https://your-backend.example.com/api/v1
+# The backend origin is hardcoded in vercel.json (rewrites + CSP connect-src).
+# Vercel reads vercel.json at deploy-start, before the build runs, so a
+# build-time substitution cannot affect the served CSP headers — update
+# vercel.json directly when the backend origin changes.
 ```
 
 ---

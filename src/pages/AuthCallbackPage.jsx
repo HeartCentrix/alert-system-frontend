@@ -5,24 +5,20 @@ import { Loader2 } from 'lucide-react'
 
 export default function AuthCallbackPage() {
   const navigate = useNavigate()
-  const { setTokensFromSSO } = useAuthStore()
+  const { completeSSOFromCookie } = useAuthStore()
   const [error, setError] = useState(null)
-  // useRef prevents the effect running twice in React Strict Mode
   const handled = useRef(false)
 
   useEffect(() => {
     if (handled.current) return
     handled.current = true
 
-    // Read tokens from URL BEFORE any async work so they can't be lost
-    // if the component re-renders or App's init() races against us.
-    // window.location is used directly (not useLocation) so we get the
-    // raw URL that the backend redirected to, not any React-router rewrite.
+    // Tokens are not passed in the URL anymore — the backend sets an
+    // HttpOnly refresh cookie and redirects here (security review F-C3).
+    // Error states are still forwarded via query string so this page can
+    // surface them to the user.
     const params = new URLSearchParams(window.location.search)
-    const accessToken = params.get('access_token')
-    const refreshToken = params.get('refresh_token')
     const errorParam = params.get('error')
-
     if (errorParam) {
       if (errorParam === 'mfa_required_on_idp') {
         setError('mfa_required')
@@ -33,38 +29,11 @@ export default function AuthCallbackPage() {
       return
     }
 
-    if (!accessToken || !refreshToken) {
-      setError('Missing authentication tokens. Redirecting to login...')
-      setTimeout(() => navigate('/login', { replace: true }), 2000)
-      return
-    }
-
-    // Immediately stash tokens into sessionStorage BEFORE calling setTokensFromSSO.
-    // This means even if App's init() fires concurrently, it will find a valid
-    // token in sessionStorage and authenticate correctly instead of clearing state.
-    // setTokensFromSSO will overwrite these with the same values — no harm done.
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]))
-      const expiresIn = payload.exp
-        ? Math.max(60, payload.exp - Math.floor(Date.now() / 1000))
-        : 3600
-      const expiryTime = Date.now() + expiresIn * 1000
-      sessionStorage.setItem('access_token', accessToken)
-      sessionStorage.setItem('access_token_expiry', expiryTime.toString())
-      sessionStorage.setItem('refresh_token', refreshToken)
-    } catch {
-      // JWT decode failed — setTokensFromSSO will handle it with its own fallback
-    }
-
-    // Now complete the auth flow (fetches /auth/me, sets user in store)
-    setTokensFromSSO(accessToken, refreshToken)
+    completeSSOFromCookie()
       .then(() => {
-        // Replace the callback URL (with tokens in it) so back button
-        // doesn't re-process the same tokens
         navigate('/dashboard', { replace: true })
       })
-      .catch((err) => {
-        console.error('SSO callback error:', err)
+      .catch(() => {
         setError('Failed to complete sign-in. Please try again.')
         setTimeout(() => navigate('/login', { replace: true }), 3000)
       })

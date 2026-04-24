@@ -79,6 +79,12 @@ jobs:
         run: npm run typecheck
         continue-on-error: true  # Type warnings shouldn't block CI initially
 
+      # Fail the build on HIGH or CRITICAL npm vulnerabilities in runtime
+      # dependencies. Moderate/low issues still show up in the log for
+      # triage but do not block merges (security review F-L3).
+      - name: npm audit (production deps)
+        run: npm audit --omit=dev --audit-level=high
+
   # ===========================================================================
   # TESTING
   # ===========================================================================

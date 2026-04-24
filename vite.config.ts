@@ -18,8 +18,8 @@ const SECURITY_HEADERS: Record<string, string> = {
     "style-src 'self' 'unsafe-inline'",
     // Specific domains only — no scheme-level wildcards (ZAP: Wildcard Directive)
     // CARTO tiles: https://{s}.basemaps.cartocdn.com
-    // QR code images: https://api.qrserver.com
-    "img-src 'self' data: blob: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com https://api.qrserver.com",
+    // QR codes are rendered locally with qrcode.react (security review F-C1)
+    "img-src 'self' data: blob: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com",
     // Fonts served from own origin only (no external CDN after removing Google Fonts link)
     "font-src 'self'",
     // ws://localhost:3000 needed for Vite HMR WebSocket (dynamic port via env)
