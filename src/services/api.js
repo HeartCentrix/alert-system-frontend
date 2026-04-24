@@ -428,8 +428,11 @@ export const notificationsAPI = {
   delivery: (id, params) => api.get(`/notifications/${id}/delivery`, { params }),
   responses: (id) => api.get(`/notifications/${id}/responses`),
   respond: (id, data, token) => {
+    // Send the checkin token in a header rather than as a query parameter
+    // — query params land in access logs, Referer, and browser history
+    // (security review F-H3). The backend reads X-Checkin-Token.
     return api.post(`/notifications/${id}/respond`, data, {
-      params: { token }
+      headers: token ? { 'X-Checkin-Token': token } : undefined,
     })
   },
 }
