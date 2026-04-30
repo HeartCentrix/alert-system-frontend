@@ -1,0 +1,76 @@
+# Frontend nginx config — kept in lockstep with vercel.json so on-prem
+# nginx and Vercel deploys present identical CSP and security headers
+# (security review F-H4).
+#
+# ${BACKEND_HOST} is substituted at container start (default: api:8000).
+# ${NGINX_RESOLVER} too (default 127.0.0.11 — Docker embedded DNS).
+# See alert-system-frontend/Dockerfile and DEPLOYMENT.md §3.5.
+
+# Use a runtime DNS resolver so the upstream backend is resolved per
+# request instead of at nginx startup. Without this, nginx refuses to
+# start if the backend is briefly unreachable, and never re-resolves
+# after IP rotation (common in Kubernetes / ECS service discovery).
+resolver ${NGINX_RESOLVER} ipv6=off valid=30s;
+
+server {
+    listen       8080;
+    listen       [::]:8080;
+    server_name  _;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    server_tokens off;
+    autoindex     off;
+
+    # ── Security headers ─────────────────────────────────────────────────
+    # CSP, HSTS, X-Frame-Options, Permissions-Policy, etc. mirror the
+    # Vercel response-header config exactly. Any change here MUST be
+    # reflected in vercel.json and vice versa.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'self' blob:; upgrade-insecure-requests" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(self), microphone=(), camera=(), payment=(), usb=()" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+
+    # ── /api/* same-origin proxy ─────────────────────────────────────────
+    # The SPA calls /api/v1/... assuming a same-origin proxy. nginx
+    # forwards to the backend service. Override BACKEND_HOST at container
+    # start (e.g., -e BACKEND_HOST=alert-api.svc.cluster.local:8000) so the
+    # frontend image is reusable across environments.
+    location /api/ {
+        # Variable proxy_pass forces runtime DNS resolution (uses the
+        # `resolver` directive above), so nginx tolerates a backend that
+        # rotates IPs or is briefly unreachable at startup.
+        set $backend "${BACKEND_HOST}";
+        proxy_pass http://$backend$request_uri;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        client_max_body_size 50m;
+    }
+
+    # ── SPA fallback ─────────────────────────────────────────────────────
+    # React Router owns client-side navigation; any non-asset path returns
+    # index.html so deep links work after a full page load.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # ── Hardening ────────────────────────────────────────────────────────
+    # Block requests for hidden files (.git, .env, etc.) and common
+    # source-control directories that should never have shipped.
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+}

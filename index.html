@@ -7,7 +7,11 @@
     
     <!-- 2026 STANDARD: Security meta tags -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; connect-src 'self' https://web-production-129b9f.up.railway.app http://localhost:8000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" />
+    <!-- CSP is delivered via response headers per environment: Vite in dev
+         (vite.config.ts), Vercel in prod (vercel.json). A meta CSP here
+         created drift between dev/prod policies and shipped permissive
+         directives (https: img wildcard, localhost connect-src) into prod
+         HTML — security review F-H4. -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta http-equiv="X-Frame-Options" content="DENY" />
     

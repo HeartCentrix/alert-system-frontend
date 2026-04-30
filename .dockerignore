@@ -1,0 +1,35 @@
+# Build artefacts and local state — never copied into the image.
+node_modules
+dist
+coverage
+playwright-report
+test-results
+
+# VCS and editors
+.git
+.gitignore
+.vscode
+.idea
+
+# Local environment files (secrets) — image gets VITE_API_URL via build-arg.
+.env
+.env.*
+!.env.example
+
+# OS / log noise
+.DS_Store
+*.log
+npm-debug.log*
+
+# Test fixtures and one-off scripts that don't belong in a prod image.
+*.spec.ts
+*.test.ts
+*.test.js
+*.test.tsx
+*.test.jsx
+**/__tests__/**
+**/__snapshots__/**
+
+# Docker config itself doesn't need to ship.
+Dockerfile
+.dockerignore

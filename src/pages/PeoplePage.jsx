@@ -244,7 +244,6 @@ function UserModal({ user, onClose, onSaved }) {
 
   const handleCreate = async (data, cleanedData) => {
     const password = data.password || generateTempPassword()
-    console.log('Creating user with data:', { ...cleanedData, password })
     await usersAPI.create({ ...cleanedData, password })
     await queryClient.invalidateQueries({ queryKey: ['user-filter-options'], refetchType: 'all' })
 
