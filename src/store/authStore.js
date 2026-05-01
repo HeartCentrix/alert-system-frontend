@@ -270,23 +270,28 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Called by AuthCallbackPage after SSO. The backend has set an HttpOnly
-  // refresh cookie; exchange it for an access token via /auth/refresh rather
-  // than reading tokens from the URL (security review F-C3 / B-C2).
+  // Called by AuthCallbackPage after SSO. The backend has already set
+  // BOTH HttpOnly access and refresh cookies during the Entra callback
+  // (auth.py:_entra_callback_success, security review F-C2 / F-C3). We
+  // hydrate user state via GET /auth/me which travels on the
+  // already-set access cookie.
+  //
+  // Calling POST /auth/refresh here would 403: the SPA has just loaded
+  // fresh on /auth/callback and has not yet received any response from
+  // which to read the X-CSRF-Token header that the request interceptor
+  // needs to send back on state-changing requests. /auth/me is a GET so
+  // CSRF is not required, and the response also seeds _csrfToken for
+  // any subsequent POSTs.
   completeSSOFromCookie: async () => {
     try {
-      const { data } = await authAPI.refresh()
-      saveAccessToken(data.access_token, data.expires_in)
-      if (data.refresh_token) saveRefreshToken(data.refresh_token)
+      const { data: user } = await authAPI.me()
       set({
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token || get().refreshToken,
-        user: data.user,
+        user,
         isAuthenticated: true,
         isLoading: false,
       })
       get().startHeartbeat()
-      return data
+      return { user }
     } catch (err) {
       clearAccessToken()
       clearRefreshToken()
