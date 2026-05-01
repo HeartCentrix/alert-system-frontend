@@ -12,6 +12,33 @@ import RecoveryCodeLoginForm from '@/components/auth/RecoveryCodeLoginForm'
 import LocalLoginForm from '@/components/auth/LocalLoginForm'
 import LoginPageWrapper from '@/components/auth/LoginPageWrapper'
 
+// Some backend error responses carry a structured object in `detail`
+// (e.g., {"message": "...", "remaining_attempts": 5, ...}). The login
+// flow used to do `err.response.data.detail.includes(...)` directly,
+// which throws "includes is not a function" when detail is an object.
+// Always normalise to a string before pattern-matching. Order:
+//   1. detail is a plain string ('Invalid credentials...') → use it
+//   2. detail is an object with .message → use that string
+//   3. detail is an array (Pydantic validation) → join messages
+//   4. fallback to err.message → fallback to ''
+function extractErrorString(err) {
+  const data = err?.response?.data
+  if (typeof data === 'string') return data
+  const detail = data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object' && typeof detail.message === 'string') {
+    return detail.message
+  }
+  if (Array.isArray(detail)) {
+    return detail.map(d => d?.msg || '').filter(Boolean).join('; ')
+  }
+  if (typeof data?.message === 'string') return data.message
+  if (typeof err?.message === 'string') return err.message
+  // Last resort — never return the unhelpful default; let the caller
+  // fall through to its own context-specific default ("Invalid code...").
+  return ''
+}
+
 const LOGO_SECTION = (
   <div className="flex items-center gap-3 justify-center mb-6 sm:mb-8">
     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-danger-600 flex items-center justify-center shadow-glow-red">
@@ -195,15 +222,15 @@ export default function LoginPage() {
       setFailedAttempts(0) // Reset on success
       navigate('/dashboard')
     } catch (err) {
-      const message = err.response?.data?.detail || err.message
+      const message = extractErrorString(err)
       // Provide specific error messages based on the error type
       let errorMessage = 'Invalid code. Please try again.'
 
-      if (message?.includes('locked')) {
+      if (message.toLowerCase().includes('locked')) {
         errorMessage = 'Account locked due to too many failed attempts. Please try again later.'
-      } else if (message?.includes('expired')) {
+      } else if (message.toLowerCase().includes('expired')) {
         errorMessage = 'Session expired. Please try logging in again.'
-      } else if (message?.includes('recovery')) {
+      } else if (message.toLowerCase().includes('recovery')) {
         errorMessage = 'Invalid recovery code'
       } else if (message) {
         // Use the message from server (includes "Invalid credentials or MFA code")
@@ -227,15 +254,15 @@ export default function LoginPage() {
       setFailedAttempts(0) // Reset on success
       navigate('/dashboard')
     } catch (err) {
-      const message = err.response?.data?.detail || err.message
+      const message = extractErrorString(err)
       // Provide specific error messages based on the error type
       let errorMessage = 'Invalid recovery code. Please try again.'
 
-      if (message?.includes('locked')) {
+      if (message.toLowerCase().includes('locked')) {
         errorMessage = 'Account locked due to too many failed attempts. Please try again later.'
-      } else if (message?.includes('expired')) {
+      } else if (message.toLowerCase().includes('expired')) {
         errorMessage = 'Session expired. Please try logging in again.'
-      } else if (message?.includes('used')) {
+      } else if (message.toLowerCase().includes('used')) {
         errorMessage = 'This recovery code has already been used'
       } else if (message) {
         errorMessage = message

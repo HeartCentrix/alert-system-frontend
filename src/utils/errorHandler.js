@@ -78,8 +78,17 @@ function normalizePydanticError(errorItem) {
     return typeMapper(fieldName)
   }
 
-  // Handle value_error (email validation)
+  // Pydantic emits `value_error` for ANY custom validator that raises
+  // ValueError — password strength, format constraints, business rules,
+  // etc. — not just email. Use the actual `msg` (Pydantic prefixes it
+  // with "Value error, " so strip that). Fall back to the field-name
+  // default only when no msg is available.
   if (type === 'value_error') {
+    if (msg && typeof msg === 'string') {
+      const cleaned = msg.replace(/^Value error,\s*/i, '').trim()
+      if (cleaned) return cleaned
+    }
+    // Legacy email path: only when msg explicitly mentions email
     return `${fieldName} ${getEmailError(msg)}`
   }
 

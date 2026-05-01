@@ -66,7 +66,13 @@ function AssignUserModal({ locationId, locationName, onClose, onAssigned }) {
       user_id: parseInt(data.user_id),
       location_id: parseInt(locationId),
       notes: data.notes || null,
-      expires_at: data.expires_at || null,
+      // <input type="datetime-local"> returns a naked local-time string
+      // like "2026-05-01T18:49" with no timezone. Sending that as-is
+      // makes the backend store it as UTC, which silently shifts the
+      // real expiry by the user's local UTC offset. Convert to a
+      // tz-aware ISO string so the server stores the moment the user
+      // actually meant.
+      expires_at: data.expires_at ? new Date(data.expires_at).toISOString() : null,
     }),
     onSuccess: () => {
       toast.success('User assigned to location successfully')
@@ -295,7 +301,7 @@ function MemberDetailsModal({ member, onClose, onRemove }) {
                 <span className="text-sm text-slate-500">Expires</span>
                 <span className="text-sm text-white flex items-center gap-1">
                   <Clock size={14} />
-                  {new Date(member.expires_at).toLocaleDateString()}
+                  {new Date(member.expires_at).toLocaleString()}
                 </span>
               </div>
             )}

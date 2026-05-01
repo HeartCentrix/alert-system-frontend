@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Check, ChevronRight, ChevronLeft, Send, Bell, Users, Radio, MessageSquare, AlertTriangle } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, ChevronRight, ChevronLeft, Send, Bell, Users, Radio, MessageSquare, AlertTriangle, Plus } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { notificationsAPI, groupsAPI, usersAPI, templatesAPI, incidentsAPI } from '@/services/api'
 import { INCIDENT_TYPES, CHANNELS, cn } from '@/utils/helpers'
@@ -43,10 +43,59 @@ function StepIndicator({ current, steps }) {
 // Step 1: Select incident type
 function Step1({ form }) {
   const type = form.watch('incident_type')
+  const incidentId = form.watch('incident_id')
+  const qc = useQueryClient()
+  // Inline-create form state. Hidden by default; opens when the user
+  // clicks "+ Create new incident". Notifications and incidents are
+  // separate entities — this lets the user create the incident inline
+  // and auto-link it to the notification being built.
+  const [showCreateIncident, setShowCreateIncident] = useState(false)
+  const [createIncidentTitle, setCreateIncidentTitle] = useState('')
+  const [createIncidentSeverity, setCreateIncidentSeverity] = useState('medium')
+  const [createIncidentDescription, setCreateIncidentDescription] = useState('')
+  const [creatingIncident, setCreatingIncident] = useState(false)
+
+  // List incidents that are still in an "open" state — both 'active' and
+  // 'monitoring' are ongoing; only 'resolved' and 'cancelled' are
+  // terminal. Previously this filtered server-side to status='active'
+  // only, hiding 'monitoring' incidents from the link-to-existing
+  // dropdown even though they are equally valid notification subjects.
   const { data: incidents } = useQuery({
-    queryKey: ['incidents-active'],
-    queryFn: () => incidentsAPI.list({ status: 'active' }).then(r => r.data),
+    queryKey: ['incidents-open'],
+    queryFn: () => incidentsAPI.list().then(r =>
+      (r.data || []).filter(i => i.status === 'active' || i.status === 'monitoring')
+    ),
   })
+
+  const handleCreateIncident = async () => {
+    if (!createIncidentTitle.trim()) {
+      toast.error('Incident title is required')
+      return
+    }
+    setCreatingIncident(true)
+    try {
+      const { data: newIncident } = await incidentsAPI.create({
+        title: createIncidentTitle.trim(),
+        type: type || null,                       // pre-fills from the selected type card
+        severity: createIncidentSeverity,
+        description: createIncidentDescription.trim() || null,
+      })
+      // Refresh the dropdown's incident list and auto-select the new one
+      // so the notification will be linked to it on submit.
+      await qc.invalidateQueries({ queryKey: ['incidents-open'] })
+      form.setValue('incident_id', String(newIncident.id))
+      toast.success('Incident created and linked to this notification')
+      setShowCreateIncident(false)
+      setCreateIncidentTitle('')
+      setCreateIncidentDescription('')
+      setCreateIncidentSeverity('medium')
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || 'Failed to create incident'
+      toast.error(typeof msg === 'string' ? msg : 'Failed to create incident')
+    } finally {
+      setCreatingIncident(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -74,20 +123,101 @@ function Step1({ form }) {
         ))}
       </div>
 
-      {incidents?.length > 0 && (
-        <div>
-          <label className="label">Link to Existing Incident (optional)</label>
-          <select
-            {...form.register('incident_id')}
-            className="select"
+      <div>
+        <label className="label">Link to Incident (optional)</label>
+        <select
+          {...form.register('incident_id')}
+          className="select"
+          disabled={showCreateIncident}
+        >
+          <option value="">— Send without linking to an incident —</option>
+          {(incidents || []).map(inc => (
+            <option key={inc.id} value={inc.id}>
+              [{inc.severity?.toUpperCase()}] {inc.title}
+            </option>
+          ))}
+        </select>
+        {!showCreateIncident && incidentId && (
+          <p className="text-xs text-success-400 mt-1">
+            ✓ This notification will be linked to the selected incident.
+          </p>
+        )}
+        {!showCreateIncident && (
+          <button
+            type="button"
+            onClick={() => setShowCreateIncident(true)}
+            className="mt-2 w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed border-primary-500/40 bg-primary-600/5 hover:bg-primary-600/10 hover:border-primary-500/70 text-sm font-medium text-primary-300 transition-colors"
           >
-            <option value="">— Create new / standalone —</option>
-            {incidents.map(inc => (
-              <option key={inc.id} value={inc.id}>
-                [{inc.severity?.toUpperCase()}] {inc.title}
-              </option>
-            ))}
-          </select>
+            <Plus size={16} /> Create a new incident and link it to this notification
+          </button>
+        )}
+      </div>
+
+      {showCreateIncident && (
+        <div className="rounded-xl border border-primary-500/40 bg-primary-600/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">New Incident</h3>
+            <button
+              type="button"
+              onClick={() => setShowCreateIncident(false)}
+              className="text-xs text-slate-400 hover:text-slate-200"
+            >
+              Cancel
+            </button>
+          </div>
+          <div>
+            <label className="label">Incident Title *</label>
+            <input
+              type="text"
+              value={createIncidentTitle}
+              onChange={(e) => setCreateIncidentTitle(e.target.value)}
+              className="input"
+              placeholder="e.g. HQ Network Outage"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Severity</label>
+              <select
+                value={createIncidentSeverity}
+                onChange={(e) => setCreateIncidentSeverity(e.target.value)}
+                className="select"
+              >
+                <option value="info">Info</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Type</label>
+              <input
+                type="text"
+                value={type || ''}
+                readOnly
+                className="input opacity-70"
+                placeholder="Pick a type card above"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label">Description (optional)</label>
+            <textarea
+              rows={2}
+              value={createIncidentDescription}
+              onChange={(e) => setCreateIncidentDescription(e.target.value)}
+              className="input resize-none"
+              placeholder="Brief context for this incident"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleCreateIncident}
+            disabled={creatingIncident || !createIncidentTitle.trim()}
+            className="btn-primary w-full justify-center disabled:opacity-50"
+          >
+            {creatingIncident ? 'Creating…' : 'Create incident & link'}
+          </button>
         </div>
       )}
 
@@ -98,6 +228,11 @@ function Step1({ form }) {
           className="input"
           placeholder="e.g. Severe Weather Warning — Phoenix Sites"
         />
+        <p className="text-xs text-slate-500 mt-1">
+          This is the notification's own title — what recipients see in
+          the email subject / SMS preview. Different from the incident
+          title above.
+        </p>
       </div>
     </div>
   )

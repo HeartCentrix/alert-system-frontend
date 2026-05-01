@@ -72,7 +72,36 @@ function isCsrfError(err) {
 }
 
 function isAuthEndpointUrl(url) {
-  const authPaths = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/auth/me', '/auth/refresh']
+  // Endpoints whose 401/403 means "the credential you supplied is wrong"
+  // — NOT "your session expired, try refreshing". A failed refresh on
+  // these paths makes no sense (the user is logged in; they just typed a
+  // wrong password / OTP in a form body) and triggers a CSRF 403 cascade
+  // that ends up redirecting the user to /login, masking the real error.
+  //
+  // Includes:
+  //   - login bootstrap (/auth/login, /auth/me, /auth/refresh, etc.)
+  //   - MFA verification (login challenge + recovery-code login)
+  //   - In-session MFA management (enroll/disable/reset/regenerate-codes)
+  //   - In-session password change
+  // All of these accept credentials in the request body; a 401 from any
+  // of them is a "your input is wrong" signal, never a "session expired".
+  const authPaths = [
+    '/auth/login',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+    '/auth/me',
+    '/auth/refresh',
+    '/auth/mfa/verify-login',
+    '/auth/mfa/recovery-code/verify',
+    '/auth/ldap/login',
+    '/auth/mfa/enroll/start',
+    '/auth/mfa/enroll/complete',
+    '/auth/mfa/disable',
+    '/auth/mfa/reset/start',
+    '/auth/mfa/reset/complete',
+    '/auth/mfa/recovery-codes/regenerate',
+    '/auth/change-password',
+  ]
   return authPaths.some(path => url?.includes(path))
 }
 
@@ -101,10 +130,17 @@ function handleExpiredSession() {
 async function executeTokenRefresh() {
   // Refresh token is an HttpOnly cookie — withCredentials sends it, there
   // is nothing to pass in the body (security review B-H1 / F-C2).
+  // /auth/refresh is a state-changing POST so the CSRF middleware
+  // requires X-CSRF-Token header in addition to the csrf_token cookie.
+  // We bypass the configured `api` instance here (so a refresh failure
+  // doesn't recurse through the response interceptor), so the request
+  // interceptor doesn't run — set X-CSRF-Token explicitly.
+  const headers = {}
+  if (_csrfToken) headers['X-CSRF-Token'] = _csrfToken
   const { data } = await axios.post(
     `${API_BASE}/auth/refresh`,
     {},
-    { withCredentials: true }
+    { withCredentials: true, headers }
   )
   return { access_token: data?.access_token, refresh_token: data?.refresh_token }
 }
@@ -125,21 +161,20 @@ api.interceptors.response.use(
   async (err) => {
     const original = err.config
 
-    // Handle CSRF errors
+    // Skip token refresh for auth-completion endpoints. Their 401/403
+    // means the supplied credential is wrong, not that the session
+    // expired — refreshing makes no sense and produces a CSRF 403
+    // cascade that wipes the real error from the UI.
+    if (isAuthEndpointUrl(original?.url)) throw err
+
+    // Handle CSRF errors on non-auth endpoints. Drop the cached token so
+    // the next response (which will carry a fresh X-CSRF-Token via the
+    // CSRF middleware) seeds a new one. Don't reload — that wipes any
+    // in-flight error toast and confuses the user.
     if (err.response?.status === 403 && err.response?.data?.detail?.includes('CSRF')) {
-      window.location.reload()
+      _csrfToken = null
       throw err
     }
-
-    // Skip token refresh for auth endpoints
-    const isAuthEndpoint =
-      original?.url?.includes('/auth/login') ||
-      original?.url?.includes('/auth/forgot-password') ||
-      original?.url?.includes('/auth/reset-password') ||
-      original?.url?.includes('/auth/me') ||
-      original?.url?.includes('/auth/refresh')
-
-    if (isAuthEndpoint) throw err
 
     // Handle 401 or 403 "Not authenticated"
     const isAuthFailure =
@@ -184,10 +219,13 @@ api.interceptors.response.use(
 // caller wants the expires_in hint, but session state lives in cookies.
 async function refreshAccessToken() {
   try {
+    // See executeTokenRefresh for why X-CSRF-Token is set explicitly.
+    const headers = {}
+    if (_csrfToken) headers['X-CSRF-Token'] = _csrfToken
     const { data } = await axios.post(
       `${API_BASE}/auth/refresh`,
       {},
-      { withCredentials: true }
+      { withCredentials: true, headers }
     )
     return { access_token: data?.access_token, refresh_token: data?.refresh_token }
   } catch (refreshErr) {
@@ -234,7 +272,7 @@ export const authAPI = {
   completeMFAEnrollment: (code) => api.post('/auth/mfa/enroll/complete', { code }),
   disableMFAWithReauth: (current_password, mfa_code) => api.post('/auth/mfa/disable', { current_password, mfa_code }),
   startMFAReset: (current_password, mfa_code) => api.post('/auth/mfa/reset/start', { current_password, mfa_code }),
-  completeMFAReset: (code) => api.post('/auth/mfa/reset/complete', { code }),
+  completeMFAReset: (code, reset_token) => api.post('/auth/mfa/reset/complete', { code, reset_token }),
   getRecoveryCodesStatus: () => api.get('/auth/mfa/recovery-codes/status'),
   regenerateRecoveryCodes: (params) => api.post('/auth/mfa/recovery-codes/regenerate', params),
 }

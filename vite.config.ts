@@ -64,10 +64,14 @@ const SECURITY_HEADERS: Record<string, string> = {
    * Permissions-Policy (formerly Feature-Policy)
    * Disables unused browser features to reduce attack surface
    */
+  // geolocation=(self) — first-party only; required for the SPA's
+  // location-tracking feature (App.jsx#updateGeofence) which posts the
+  // user's coords to /api/location-audience/geofence/update. Empty
+  // parens "geolocation=()" would block first-party use too.
   'Permissions-Policy': [
     'camera=()',
     'microphone=()',
-    'geolocation=()',
+    'geolocation=(self)',
     'payment=()',
     'usb=()',
     'magnetometer=()',

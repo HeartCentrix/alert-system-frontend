@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Shield, Key, RefreshCw, AlertTriangle, CheckCircle, XCircle, Smartphone, Lock } from 'lucide-react'
 import { authAPI } from '@/services/api'
@@ -7,6 +7,15 @@ import { cn } from '@/utils/helpers'
 import { getPrimaryErrorMessage, getUserFacingErrorMessages } from '@/utils/errorHandler'
 import ModalPortal from '@/components/ui/ModalPortal'
 import { QRCodeSVG } from 'qrcode.react'
+import useAuthStore from '@/store/authStore'
+
+// SSO users (auth_provider = 'entra' or 'ldap') have no local password, so the
+// reauthentication step is skipped — the backend already does the same in
+// mfa_lifecycle.start_enrollment ('# SSO users have no local password —
+// identity already verified via SSO session'). The frontend mirrors this so
+// the UX doesn't ask for a password the user does not have.
+const isSSOAuthProvider = (provider) =>
+  provider && provider !== 'local'
 
 /**
  * MFAManagementTab - Complete MFA lifecycle management component
@@ -223,13 +232,39 @@ function MFAEnableCard({ mfaConfigured, onEnableComplete }) {
  * MFAEnrollmentModal - Step-by-step MFA enrollment with reauthentication
  */
 function MFAEnrollmentModal({ onClose, onEnrollmentComplete }) {
-  const [step, setStep] = useState('reauth') // reauth, setup, verify, success
+  const user = useAuthStore((s) => s.user)
+  const isSSO = isSSOAuthProvider(user?.auth_provider)
+  // SSO users skip the password reauth step — they have no local password,
+  // and the backend already accepts the enrollment without one.
+  const [step, setStep] = useState(isSSO ? 'setup' : 'reauth')
   const [password, setPassword] = useState('')
   const [qrCodeUri, setQrCodeUri] = useState('')
   const [secret, setSecret] = useState('')
   const [recoveryCodes, setRecoveryCodes] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // For SSO users, kick off enrollment immediately on mount so they see the
+  // QR code without any password prompt.
+  useEffect(() => {
+    if (!isSSO) return
+    let cancelled = false
+    setLoading(true)
+    authAPI.startMFAEnrollment('')
+      .then(({ data }) => {
+        if (cancelled) return
+        setQrCodeUri(data.qr_code_uri)
+        setSecret(data.manual_entry_key)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(getPrimaryErrorMessage(err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [isSSO])
 
   const handleStartEnrollment = async (e) => {
     e.preventDefault()
@@ -388,6 +423,8 @@ function MFADisableCard({ onDisableComplete }) {
  * MFADisableModal - Secure MFA disable with reauthentication and MFA verification
  */
 function MFADisableModal({ onClose, onDisableComplete }) {
+  const user = useAuthStore((s) => s.user)
+  const isSSO = isSSOAuthProvider(user?.auth_provider)
   const [password, setPassword] = useState('')
   const [mfaCode, setMfaCode] = useState('')
   const [loading, setLoading] = useState(false)
@@ -406,7 +443,10 @@ function MFADisableModal({ onClose, onDisableComplete }) {
     setLoading(true)
 
     try {
-      await authAPI.disableMFAWithReauth(password, mfaCode)
+      // SSO users (auth_provider != 'local') have no local password — pass
+      // an empty string. The backend skips the password check for them
+      // (mfa_lifecycle.disable_mfa).
+      await authAPI.disableMFAWithReauth(isSSO ? '' : password, mfaCode)
       toast.success('MFA disabled. Your account is now less secure.')
       onDisableComplete()
       onClose()
@@ -440,16 +480,18 @@ function MFADisableModal({ onClose, onDisableComplete }) {
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className="label">Current Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
-                placeholder="Enter your password"
-              />
-            </div>
+            {!isSSO && (
+              <div>
+                <label className="label">Current Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input"
+                  placeholder="Enter your password"
+                />
+              </div>
+            )}
             <div>
               <label className="label">MFA Code or Recovery Code</label>
               <input
@@ -483,7 +525,7 @@ function MFADisableModal({ onClose, onDisableComplete }) {
             </button>
             <button
               type="submit"
-              disabled={loading || !confirmed || !password || !mfaCode}
+              disabled={loading || !confirmed || (!isSSO && !password) || !mfaCode}
               className="btn-danger flex-1 justify-center disabled:opacity-50"
             >
               {loading ? 'Disabling...' : 'Disable MFA'}
@@ -542,11 +584,18 @@ function MFAResetCard({ onResetComplete }) {
  * MFAResetModal - Secure MFA reset flow
  */
 function MFAResetModal({ onClose, onResetComplete }) {
+  const user = useAuthStore((s) => s.user)
+  const isSSO = isSSOAuthProvider(user?.auth_provider)
   const [step, setStep] = useState('reauth') // reauth, setup, verify, success
   const [password, setPassword] = useState('')
   const [mfaCode, setMfaCode] = useState('')
   const [qrCodeUri, setQrCodeUri] = useState('')
   const [secret, setSecret] = useState('')
+  // resetToken carries the pending (encrypted) new MFA secret as a
+  // short-lived signed JWT issued by /mfa/reset/start. Held in modal
+  // memory only; if the user cancels, the JWT is dropped and nothing
+  // server-side has changed — the existing MFA continues to work.
+  const [resetToken, setResetToken] = useState('')
   const [recoveryCodes, setRecoveryCodes] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -557,9 +606,12 @@ function MFAResetModal({ onClose, onResetComplete }) {
     setLoading(true)
 
     try {
-      const { data } = await authAPI.startMFAReset(password, mfaCode)
+      // SSO users have no local password — pass empty string. Backend
+      // skips the check (mfa_lifecycle.start_mfa_reset).
+      const { data } = await authAPI.startMFAReset(isSSO ? '' : password, mfaCode)
       setQrCodeUri(data.qr_code_uri)
       setSecret(data.manual_entry_key)
+      setResetToken(data.reset_token || '')
       setStep('setup')
     } catch (err) {
       // Normalize error to prevent rendering raw objects
@@ -574,7 +626,7 @@ function MFAResetModal({ onClose, onResetComplete }) {
     setLoading(true)
 
     try {
-      const { data } = await authAPI.completeMFAReset(code)
+      const { data } = await authAPI.completeMFAReset(code, resetToken)
       setRecoveryCodes(data.recovery_codes)
       setStep('success')
       // Don't call onResetComplete yet - wait for user to dismiss recovery codes
@@ -602,20 +654,24 @@ function MFAResetModal({ onClose, onResetComplete }) {
                 Reset MFA
               </h3>
               <p className="text-slate-400 text-sm mb-4">
-                Enter your password and current MFA code (or a recovery code) to start the reset process.
+                {isSSO
+                  ? 'Enter your current MFA code (or a recovery code) to start the reset process.'
+                  : 'Enter your password and current MFA code (or a recovery code) to start the reset process.'}
               </p>
               <div className="space-y-4">
-              <div>
-                <label className="label">Current Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input"
-                  placeholder="Enter your password"
-                  autoFocus
-                />
-              </div>
+              {!isSSO && (
+                <div>
+                  <label className="label">Current Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="input"
+                    placeholder="Enter your password"
+                    autoFocus
+                  />
+                </div>
+              )}
               <div>
                 <label className="label">Current MFA Code or Recovery Code</label>
                 <input
@@ -636,7 +692,7 @@ function MFAResetModal({ onClose, onResetComplete }) {
               </button>
               <button
                 type="submit"
-                disabled={loading || !password || !mfaCode}
+                disabled={loading || (!isSSO && !password) || !mfaCode}
                 className="btn-primary flex-1 justify-center disabled:opacity-50"
               >
                 {loading ? 'Starting...' : 'Continue'}
@@ -871,6 +927,8 @@ function RecoveryCodesDisplay({ codes, onClose }) {
 }
 
 function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus }) {
+  const user = useAuthStore((s) => s.user)
+  const isSSO = isSSOAuthProvider(user?.auth_provider)
   const [password, setPassword] = useState('')
   const [mfaCode, setMfaCode] = useState('')
   const [loading, setLoading] = useState(false)
@@ -885,7 +943,9 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
 
     try {
       const params = {
-        current_password: password,
+        // SSO users have no local password — backend skips the check
+        // (mfa_lifecycle.regenerate_recovery_codes).
+        current_password: isSSO ? '' : password,
         method: 'totp',
         mfa_code: mfaCode,
       }
@@ -947,17 +1007,19 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
             </div>
 
             <div className="space-y-4">
-            <div>
-              <label className="label">Current Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
-                placeholder="Enter your password"
-                autoFocus
-              />
-            </div>
+            {!isSSO && (
+              <div>
+                <label className="label">Current Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input"
+                  placeholder="Enter your password"
+                  autoFocus
+                />
+              </div>
+            )}
 
             <div>
               <label className="label">Authenticator Code</label>
@@ -975,6 +1037,7 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
                 pattern="\d{6}"
                 maxLength={6}
                 autoComplete="one-time-code"
+                autoFocus={isSSO}
               />
               <p className="mt-1 text-xs text-slate-400">
                 Enter the 6-digit code from your authenticator app
@@ -994,7 +1057,7 @@ function RecoveryCodesRegenerateModal({ onClose, onRegenerateComplete, mfaStatus
             </button>
             <button
               type="submit"
-              disabled={loading || !password || mfaCode.length !== 6}
+              disabled={loading || (!isSSO && !password) || mfaCode.length !== 6}
               className="btn-primary flex-1 justify-center disabled:opacity-50"
             >
               {loading ? 'Regenerating...' : 'Regenerate'}
