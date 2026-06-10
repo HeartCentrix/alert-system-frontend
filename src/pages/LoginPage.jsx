@@ -281,10 +281,19 @@ export default function LoginPage() {
     setShowRecoveryCodeForm(false)
   }
 
-  const handleRecoveryCodesDismiss = () => {
-    const { updateUser } = useAuthStore.getState()
-    updateUser({})
-    useAuthStore.setState({ isAuthenticated: true })
+  const handleRecoveryCodesDismiss = async () => {
+    // Establish the session server-side ONLY now (after the codes were shown).
+    // The backend withheld it until this acknowledge call, so the screen can't
+    // be bypassed by navigating away.
+    try {
+      await useAuthStore.getState().acknowledgeRecoveryCodes()
+    } catch (e) {
+      toast.error('Could not finish sign-in. Please log in again.')
+      setShowRecoveryCodesDisplay(false)
+      setPendingRecoveryCodes(null)
+      navigate('/login')
+      return
+    }
     setShowRecoveryCodesDisplay(false)
     setPendingRecoveryCodes(null)
     toast.success('Recovery codes saved. Continue to dashboard.')

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 import { MessageSquare, Phone, RefreshCw, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import api from '@/services/api'
 import { timeAgo, channelIcon, channelLabel, cn } from '@/utils/helpers'
@@ -28,6 +29,17 @@ export default function IncomingPage() {
       // Fetch all messages for export (in case there are more than loaded)
       const messages = allMessages
 
+      // Escape one CSV cell: neutralise formula injection (a leading
+      // = + - @ TAB or CR makes Excel/Sheets execute the cell as a formula —
+      // from_number/user_name/body are attacker-controlled inbound content),
+      // then always quote and double up embedded quotes (RFC 4180) so commas,
+      // quotes and newlines can't shift columns or split rows.
+      const esc = (value) => {
+        let s = String(value ?? '')
+        if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
+        return `"${s.replace(/"/g, '""')}"`
+      }
+
       const headers = ['ID', 'Notification ID', 'From Number', 'User Name', 'Channel', 'Body', 'Received At', 'Processed']
       const rows = messages.map(msg => [
         msg.id,
@@ -35,17 +47,18 @@ export default function IncomingPage() {
         msg.from_number || '',
         msg.user_name || '',
         msg.channel || '',
-        `"${(msg.body || '').replace(/"/g, '""')}"`,
+        msg.body || '',
         msg.received_at || '',
         msg.is_processed ? 'Yes' : 'No'
-      ])
+      ].map(esc))
 
       const csvContent = [
-        headers.join(','),
+        headers.map(esc).join(','),
         ...rows.map(row => row.join(','))
-      ].join('\n')
+      ].join('\r\n')
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      // Prepend a UTF-8 BOM so Excel decodes non-ASCII correctly.
+      const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
       const url = URL.createObjectURL(blob)
       link.setAttribute('href', url)
@@ -54,6 +67,7 @@ export default function IncomingPage() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Export failed:', error)
     }

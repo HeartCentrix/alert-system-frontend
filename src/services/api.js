@@ -112,45 +112,6 @@ function isAuthFailureStatus(err) {
   )
 }
 
-function handleExpiredSession() {
-  const currentPath = globalThis.location.pathname
-  const isPublicPage =
-    currentPath === '/login' ||
-    currentPath === '/forgot-password' ||
-    currentPath === '/reset-password' ||
-    currentPath.startsWith('/notifications/') ||
-    currentPath === '/responded'
-
-  _getAuthStore?.()?.clearSession?.()
-  if (!isPublicPage) {
-    globalThis.location.href = '/#/login'
-  }
-}
-
-async function executeTokenRefresh() {
-  // Refresh token is an HttpOnly cookie — withCredentials sends it, there
-  // is nothing to pass in the body (security review B-H1 / F-C2).
-  // /auth/refresh is a state-changing POST so the CSRF middleware
-  // requires X-CSRF-Token header in addition to the csrf_token cookie.
-  // We bypass the configured `api` instance here (so a refresh failure
-  // doesn't recurse through the response interceptor), so the request
-  // interceptor doesn't run — set X-CSRF-Token explicitly.
-  const headers = {}
-  if (_csrfToken) headers['X-CSRF-Token'] = _csrfToken
-  const { data } = await axios.post(
-    `${API_BASE}/auth/refresh`,
-    {},
-    { withCredentials: true, headers }
-  )
-  return { access_token: data?.access_token, refresh_token: data?.refresh_token }
-}
-
-async function retryWithNewToken(original, _tokens) {
-  // Cookies were rotated by /auth/refresh; simply replay the original
-  // request and the browser will attach the new access_token cookie.
-  return api.request({ ...original })
-}
-
 // ── Response interceptor ─────────────────────────────────────────────────────
 api.interceptors.response.use(
   (res) => {
@@ -219,7 +180,11 @@ api.interceptors.response.use(
 // caller wants the expires_in hint, but session state lives in cookies.
 async function refreshAccessToken() {
   try {
-    // See executeTokenRefresh for why X-CSRF-Token is set explicitly.
+    // /auth/refresh is a state-changing POST, so the CSRF middleware requires
+    // the X-CSRF-Token header alongside the cookie. This call bypasses the
+    // `api` instance (so a refresh failure can't recurse through this
+    // interceptor), meaning the request interceptor doesn't run — set the
+    // header explicitly. Both tokens are HttpOnly cookies (F-C2).
     const headers = {}
     if (_csrfToken) headers['X-CSRF-Token'] = _csrfToken
     const { data } = await axios.post(
@@ -238,11 +203,11 @@ async function refreshAccessToken() {
       currentPath.startsWith('/notifications/') ||
       currentPath === '/responded'
 
+    // App uses BrowserRouter with clean paths — redirect to '/login', not the
+    // legacy HashRouter '/#/login' (which loaded '/' with a dangling hash).
+    _getAuthStore?.()?.clearSession?.()
     if (!isPublicPage) {
-      _getAuthStore?.()?.clearSession?.()
-      window.location.href = '/#/login'
-    } else {
-      _getAuthStore?.()?.clearSession?.()
+      window.location.href = '/login'
     }
     throw refreshErr
   } finally {
@@ -264,6 +229,7 @@ export const authAPI = {
   changePassword: (current, next) => api.post('/auth/change-password', { current_password: current, new_password: next }),
   verifyMFA: (challenge_token, code) => api.post('/auth/mfa/verify-login', { challenge_token, code }),
   verifyMFAWithRecoveryCode: (challenge_token, recovery_code) => api.post('/auth/mfa/recovery-code/verify', { challenge_token, recovery_code }),
+  acknowledgeRecoveryCodes: (recovery_setup_token) => api.post('/auth/mfa/recovery-codes/acknowledge', { recovery_setup_token }),
   getMFAStatus: () => api.get('/auth/mfa/status'),
   initiateMFA: () => api.post('/auth/mfa/initiate'),
   confirmMFA: (code) => api.post('/auth/mfa/confirm', { code }),
