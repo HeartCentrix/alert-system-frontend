@@ -14,6 +14,36 @@ const api = axios.create({
   withCredentials: true,
 })
 
+// ── In-flight mutation de-duplication (anti double-submit) ───────────────────
+// A double-click (or a slow network + impatient re-click) used to send the same
+// create/update/delete twice -> two rows created. Here, while a mutation is
+// in flight, an identical one (same method + URL + body) reuses the SAME pending
+// promise instead of firing a second request. The key is cleared once the
+// request settles, so legitimately repeating an action later still works.
+// Universal: covers every api.post/put/patch/delete and therefore every action.
+const _inFlightMutations = new Map()
+for (const method of ['post', 'put', 'patch', 'delete']) {
+  const original = api[method].bind(api)
+  api[method] = (url, ...rest) => {
+    // delete signature is (url, config); others are (url, data, config).
+    const data = method === 'delete' ? undefined : rest[0]
+    // Don't dedupe file uploads / non-serializable bodies — let them through.
+    const dedupable =
+      data == null ||
+      (typeof data === 'object' && !(data instanceof FormData) && !(data instanceof Blob))
+    if (!dedupable) return original(url, ...rest)
+
+    let body = ''
+    try { body = data == null ? '' : JSON.stringify(data) } catch { return original(url, ...rest) }
+    const key = `${method}:${url}:${body}`
+    if (_inFlightMutations.has(key)) return _inFlightMutations.get(key)
+
+    const promise = original(url, ...rest).finally(() => _inFlightMutations.delete(key))
+    _inFlightMutations.set(key, promise)
+    return promise
+  }
+}
+
 // ── Auth store accessor (breaks circular dependency) ──────────────────────
 let _getAuthStore = null
 export function setAuthStoreAccessor(fn) {
