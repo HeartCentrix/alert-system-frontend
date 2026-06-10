@@ -229,6 +229,7 @@ export const authAPI = {
   changePassword: (current, next) => api.post('/auth/change-password', { current_password: current, new_password: next }),
   verifyMFA: (challenge_token, code) => api.post('/auth/mfa/verify-login', { challenge_token, code }),
   verifyMFAWithRecoveryCode: (challenge_token, recovery_code) => api.post('/auth/mfa/recovery-code/verify', { challenge_token, recovery_code }),
+  acknowledgeRecoveryCodes: (recovery_setup_token) => api.post('/auth/mfa/recovery-codes/acknowledge', { recovery_setup_token }),
   getMFAStatus: () => api.get('/auth/mfa/status'),
   initiateMFA: () => api.post('/auth/mfa/initiate'),
   confirmMFA: (code) => api.post('/auth/mfa/confirm', { code }),

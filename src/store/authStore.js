@@ -293,48 +293,45 @@ const useAuthStore = create((set, get) => ({
 
     const { data } = await authAPI.verifyMFA(mfaChallengeToken, code)
 
-    // Decode JWT to get expiry time from exp claim
-    let expiresIn = 3600 // Default 1 hour
-    try {
-      const payload = JSON.parse(atob(data.access_token.split('.')[1]))
-      if (payload.exp) {
-        const expiryTimestamp = payload.exp * 1000
-        const now = Date.now()
-        expiresIn = Math.floor((expiryTimestamp - now) / 1000)
-        if (expiresIn < 0) expiresIn = 0
-      }
-    } catch (e) {
-      console.warn('Could not decode JWT exp claim, using default expiresIn=3600')
+    // First-time MFA setup: the backend WITHHOLDS the session until the user
+    // acknowledges their recovery codes (server-enforced gate). No session
+    // cookie exists yet — hold the ack token and stay unauthenticated until
+    // acknowledgeRecoveryCodes() runs.
+    if (data?.status === 'recovery_codes_required') {
+      set({
+        user: data.user,
+        isAuthenticated: false,
+        recoverySetupToken: data.recovery_setup_token,
+        mfaState: null,
+        mfaChallengeToken: null,
+        mfaQRCodeURI: null,
+      })
+      return data
     }
 
-    if (data?.recovery_codes && data.recovery_codes.length > 0) {
-      saveRefreshToken(data.refresh_token)
-      saveAccessToken(data.access_token, expiresIn)
-      set({
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        user: data.user,
-        isAuthenticated: false,   // Keep false until recovery codes dismissed
-        mfaState: null,
-        mfaChallengeToken: null,
-        mfaQRCodeURI: null,
-      })
-    } else {
-      saveRefreshToken(data.refresh_token)
-      saveAccessToken(data.access_token, expiresIn)
-      set({
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        user: data.user,
-        isAuthenticated: true,
-        mfaState: null,
-        mfaChallengeToken: null,
-        mfaQRCodeURI: null,
-      })
-      // Start heartbeat after successful MFA verification
-      get().startHeartbeat()
-    }
+    // Normal MFA login: the backend set HttpOnly access+refresh cookies.
+    set({
+      user: data.user,
+      isAuthenticated: true,
+      recoverySetupToken: null,
+      mfaState: null,
+      mfaChallengeToken: null,
+      mfaQRCodeURI: null,
+    })
+    get().startHeartbeat()
     return data
+  },
+
+  // Finish a first-time-MFA login after the recovery codes have been shown.
+  // The session (cookies) is only established by the backend here, so the
+  // recovery-codes screen cannot be bypassed by navigating away.
+  acknowledgeRecoveryCodes: async () => {
+    const token = get().recoverySetupToken
+    if (token) {
+      await authAPI.acknowledgeRecoveryCodes(token)
+    }
+    set({ isAuthenticated: true, recoverySetupToken: null })
+    get().startHeartbeat()
   },
 
   verifyMFAWithRecoveryCode: async (recoveryCode, challengeToken) => {
