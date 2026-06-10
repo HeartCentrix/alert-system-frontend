@@ -222,54 +222,6 @@ const useAuthStore = create((set, get) => ({
     return data
   },
 
-  setTokensFromSSO: async (accessToken, refreshToken) => {
-    // Decode JWT to get expiry time from exp claim
-    let expiresIn = 3600 // Default 1 hour
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]))
-      if (payload.exp) {
-        // exp is Unix timestamp in seconds, convert to milliseconds from now
-        const expiryTimestamp = payload.exp * 1000
-        const now = Date.now()
-        expiresIn = Math.floor((expiryTimestamp - now) / 1000)
-        // Ensure positive value
-        if (expiresIn < 0) expiresIn = 0
-      }
-    } catch (e) {
-      console.warn('Could not decode JWT exp claim, using default expiresIn=3600')
-    }
-
-    // Store tokens with proper expiry
-    saveAccessToken(accessToken, expiresIn)
-    saveRefreshToken(refreshToken)
-    
-    // IMPORTANT: Set isInitializing: false to prevent race conditions
-    // React Strict Mode may trigger duplicate init() calls
-    set({ 
-      accessToken, 
-      refreshToken,
-      isInitializing: false
-    })
-
-    // Fetch user profile using the new token
-    try {
-      const { data } = await authAPI.me()
-      set({
-        user: data,
-        isAuthenticated: true,
-        isLoading: false,
-      })
-      // Start heartbeat after successful SSO login
-      get().startHeartbeat()
-    } catch (err) {
-      // Token invalid — clear everything
-      clearAccessToken()
-      clearRefreshToken()
-      set({ user: null, isAuthenticated: false, accessToken: null, refreshToken: null })
-      throw err
-    }
-  },
-
   // Called by AuthCallbackPage after SSO. The backend has already set
   // BOTH HttpOnly access and refresh cookies during the Entra callback
   // (auth.py:_entra_callback_success, security review F-C2 / F-C3). We
