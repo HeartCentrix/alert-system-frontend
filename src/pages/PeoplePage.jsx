@@ -179,6 +179,9 @@ function UserModal({ user, onClose, onSaved }) {
   // Get current user for permission check
   const { user: currentUser } = useAuthStore()
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
+  // You cannot change your OWN role (enforced server-side too) — disable the
+  // field on self-edit instead of silently dropping the change.
+  const isSelfEdit = !!(user?.id && user.id === currentUser?.id)
 
   const queryClient = useQueryClient()
 
@@ -473,9 +476,12 @@ function UserModal({ user, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Role (optional)</label>
-              <select {...register('role')} className="select">
+              <select {...register('role')} className="select" disabled={isSelfEdit}>
                 {ROLES.map(r => <option key={r} value={r}>{r.replaceAll('_', ' ')}</option>)}
               </select>
+              {isSelfEdit && (
+                <p className="text-xs text-gray-500 mt-1">You can't change your own role — ask another administrator.</p>
+              )}
             </div>
             <div>
               <label className="label">Location (optional)</label>
