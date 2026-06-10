@@ -1,6 +1,12 @@
 import axios from 'axios'
+import { queryClient } from '@/lib/queryClient'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+
+// Mutations that fire frequently in the background — refreshing all queries
+// after these would cause refetch storms, so they're excluded from the
+// auto-invalidation below.
+const NO_AUTO_INVALIDATE = ['/users/heartbeat', '/auth/refresh', '/auth/me']
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -117,6 +123,18 @@ api.interceptors.response.use(
   (res) => {
     const csrfHeader = res.headers?.['x-csrf-token']
     if (csrfHeader) _csrfToken = csrfHeader
+    // After ANY successful data mutation, refresh cached queries so the UI
+    // reflects the change without a manual page reload. This is the universal
+    // catch-all: it covers every mutation that goes through this axios
+    // instance, whether via useMutation or a direct api.* call.
+    const method = (res.config?.method || '').toLowerCase()
+    const url = res.config?.url || ''
+    if (
+      ['post', 'put', 'patch', 'delete'].includes(method) &&
+      !NO_AUTO_INVALIDATE.some((p) => url.includes(p))
+    ) {
+      queryClient.invalidateQueries()
+    }
     return res
   },
   async (err) => {
