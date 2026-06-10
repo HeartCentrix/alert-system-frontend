@@ -350,7 +350,10 @@ export default function LoginPage() {
 
   // Render Microsoft-only login (redirect immediately)
   if (authProviders.entra_enabled && !authProviders.local_enabled && !authProviders.ldap_enabled) {
-    const baseUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8000'
+    // Derive the SSO origin from VITE_API_URL. When it's relative ('/api/v1'),
+    // baseUrl becomes '' so the redirect is same-origin (proxied to the backend
+    // by Vercel) — do NOT fall back to localhost, which broke prod SSO.
+    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1').replace(/\/api\/v1\/?$/, '')
     window.location.href = `${baseUrl}/api/v1/auth/entra/login`
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-900">
@@ -403,7 +406,10 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              const baseUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8000'
+              // Derive the SSO origin from VITE_API_URL. When it's relative ('/api/v1'),
+    // baseUrl becomes '' so the redirect is same-origin (proxied to the backend
+    // by Vercel) — do NOT fall back to localhost, which broke prod SSO.
+    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1').replace(/\/api\/v1\/?$/, '')
               window.location.href = `${baseUrl}/api/v1/auth/entra/login`
             }}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors text-white"
