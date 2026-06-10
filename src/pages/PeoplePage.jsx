@@ -11,21 +11,44 @@ import { useIsDocumentVisible } from '@/hooks/useVisibility'
 
 const ROLES = ['viewer', 'manager', 'admin', 'super_admin']
 
+// Cryptographically secure random index in [0, max) with rejection sampling
+// to avoid modulo bias. Uses crypto.getRandomValues (CSPRNG), never
+// Math.random (a predictable, non-cryptographic PRNG) — these temp passwords
+// are real account credentials.
+function secureIndex(max) {
+  const limit = Math.floor(0xFFFFFFFF / max) * max
+  const buf = new Uint32Array(1)
+  let x
+  do {
+    crypto.getRandomValues(buf)
+    x = buf[0]
+  } while (x >= limit)
+  return x % max
+}
+
 function generateTempPassword() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
   const length = 16
+  // Guarantee one of each required class, then fill the rest.
   const passwordChars = [
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)],
-    'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)],
-    '0123456789'[Math.floor(Math.random() * 10)],
-    '!@#$%^&*'[Math.floor(Math.random() * 8)],
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[secureIndex(26)],
+    'abcdefghijklmnopqrstuvwxyz'[secureIndex(26)],
+    '0123456789'[secureIndex(10)],
+    '!@#$%^&*'[secureIndex(8)],
   ]
-  
+
   for (let i = 4; i < length; i++) {
-    passwordChars.push(chars[Math.floor(Math.random() * chars.length)])
+    passwordChars.push(chars[secureIndex(chars.length)])
   }
-  
-  return passwordChars.sort(() => Math.random() - 0.5).join('')
+
+  // Unbiased Fisher–Yates shuffle (the old sort(() => Math.random()-0.5) was
+  // both insecure and statistically biased).
+  for (let i = passwordChars.length - 1; i > 0; i--) {
+    const j = secureIndex(i + 1)
+    ;[passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]]
+  }
+
+  return passwordChars.join('')
 }
 
 // Clean form data by converting empty strings to null and removing empty location_id
