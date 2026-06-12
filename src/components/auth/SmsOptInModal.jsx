@@ -92,9 +92,13 @@ export default function SmsOptInModal({ user, onComplete, onCancel }) {
                   autoComplete="tel"
                   inputMode="tel"
                   value={phone}
+                  maxLength={20}
                   onChange={(e) => {
-                    setPhone(e.target.value)
-                    if (isValidMobileNumber(e.target.value)) setPhoneError('')
+                    // Digits and phone formatting only — letters and other
+                    // characters are dropped as they're typed (or pasted).
+                    const sanitized = e.target.value.replace(/[^\d\s()+\-]/g, '')
+                    setPhone(sanitized)
+                    if (isValidMobileNumber(sanitized)) setPhoneError('')
                   }}
                   aria-describedby="sms-opt-in-phone-err"
                   autoFocus
