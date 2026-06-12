@@ -170,7 +170,7 @@ function parseUserApiError(error) {
 
 function UserModal({ user, onClose, onSaved }) {
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
-    defaultValues: user || { role: 'viewer', preferred_channels: ['sms', 'email'] }
+    defaultValues: user || { role: 'viewer', preferred_channels: ['email'] }
   })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -225,7 +225,7 @@ function UserModal({ user, onClose, onSaved }) {
   useEffect(() => {
     if (!user?.id) {
       // New user - reset with default values immediately
-      reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+      reset({ role: 'viewer', preferred_channels: ['email'] })
       setGeneratedPassword(null)
       setShowPassword(false)
     } else if (latestUserData && !loadingLocations) {
@@ -276,7 +276,7 @@ function UserModal({ user, onClose, onSaved }) {
     if (!data.password) {
       setGeneratedPassword(password)
       toast.success('User created! Copy the password below')
-      reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+      reset({ role: 'viewer', preferred_channels: ['email'] })
     } else {
       toast.success('User created')
       onSaved()
@@ -306,7 +306,7 @@ function UserModal({ user, onClose, onSaved }) {
         if (!data.password) {
           setGeneratedPassword(password)
           toast.success('User created! Copy the password below')
-          reset({ role: 'viewer', preferred_channels: ['sms', 'email'] })
+          reset({ role: 'viewer', preferred_channels: ['email'] })
         } else {
           toast.success('User created')
           onSaved()

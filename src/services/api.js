@@ -289,6 +289,7 @@ export const authAPI = {
   completeMFAReset: (code, reset_token) => api.post('/auth/mfa/reset/complete', { code, reset_token }),
   getRecoveryCodesStatus: () => api.get('/auth/mfa/recovery-codes/status'),
   regenerateRecoveryCodes: (params) => api.post('/auth/mfa/recovery-codes/regenerate', params),
+  smsOptIn: ({ accepted, phone, consent }) => api.post('/auth/sms-opt-in', { accepted, phone, consent }),
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────

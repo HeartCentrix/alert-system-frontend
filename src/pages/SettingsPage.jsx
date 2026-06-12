@@ -7,6 +7,7 @@ import { authAPI, locationsAPI } from '@/services/api'
 import { cn } from '@/utils/helpers'
 import toast from 'react-hot-toast'
 import MFAManagementTab from '@/components/settings/MFAManagementTab'
+import SmsOptInModal from '@/components/auth/SmsOptInModal'
 import { getPrimaryErrorMessage } from '@/utils/errorHandler'
 
 export default function SettingsPage() {
@@ -71,7 +72,7 @@ function ProfileTab({ user }) {
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm({
     defaultValues: {
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
@@ -79,7 +80,6 @@ function ProfileTab({ user }) {
       department: user?.department || '',
       title: user?.title || '',
       location_id: user?.location_id || '',
-      preferred_channels: user?.preferred_channels || ['sms', 'email'],
     }
   })
 
@@ -92,7 +92,6 @@ function ProfileTab({ user }) {
       department: user?.department || '',
       title: user?.title || '',
       location_id: user?.location_id || '',
-      preferred_channels: user?.preferred_channels || ['sms', 'email'],
     })
   }, [user, reset])
 
@@ -182,20 +181,7 @@ function ProfileTab({ user }) {
     setValue('department', user?.department || '')
     setValue('title', user?.title || '')
     setValue('location_id', user?.location_id || '')
-    setValue('preferred_channels', user?.preferred_channels || ['sms', 'email'])
     setIsEditing(false)
-  }
-
-  const toggleChannel = (channel) => {
-    const current = watch('preferred_channels')
-    const updated = current.includes(channel)
-      ? current.filter(c => c !== channel)
-      : [...current, channel]
-    if (updated.length === 0) {
-      toast.error('At least one notification channel is required')
-      return
-    }
-    setValue('preferred_channels', updated)
   }
 
   if (isEditing) {
@@ -277,30 +263,6 @@ function ProfileTab({ user }) {
                 <option key={loc.id} value={loc.id}>{loc.name}</option>
               ))}
             </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="label mb-2">Notification Preferences</label>
-          <div className="flex gap-2">
-            {['sms', 'email', 'voice'].map(channel => {
-              const isActive = watch('preferred_channels')?.includes(channel)
-              return (
-                <button
-                  key={channel}
-                  type="button"
-                  onClick={() => toggleChannel(channel)}
-                  className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-all border',
-                    isActive
-                      ? 'bg-primary-600 border-primary-500 text-white'
-                      : 'bg-surface-800 border-surface-700 text-slate-400 hover:text-slate-200'
-                  )}
-                >
-                  {channel.charAt(0).toUpperCase() + channel.slice(1)}
-                </button>
-              )
-            })}
           </div>
         </div>
 
@@ -483,7 +445,11 @@ function PasswordTab() {
 }
 
 function PreferencesTab({ user }) {
-  const channels = user?.preferred_channels || ['sms', 'email']
+  const qc = useQueryClient()
+  const { updateUser } = useAuthStore()
+  const [showSmsOptIn, setShowSmsOptIn] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const channels = user?.preferred_channels || ['email']
 
   const allChannels = [
     { value: 'sms', label: 'SMS', icon: '💬', desc: 'Text message to your phone' },
@@ -491,8 +457,69 @@ function PreferencesTab({ user }) {
     { value: 'voice', label: 'Voice Call', icon: '📞', desc: 'Automated phone call' },
   ]
 
+  const applyUpdatedUser = (updatedUser) => {
+    updateUser(updatedUser)
+    qc.setQueryData(['auth', 'me'], updatedUser)
+  }
+
+  const saveChannels = async (updated) => {
+    setSaving(true)
+    try {
+      const { data: updatedUser } = await authAPI.updateProfile({ preferred_channels: updated })
+      applyUpdatedUser(updatedUser)
+      toast.success('Notification preferences updated')
+    } catch (error) {
+      const errorMessage = getPrimaryErrorMessage(error)
+      toast.error(errorMessage || 'Failed to update preferences')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleChannel = (channel) => {
+    if (saving) return
+    const active = channels.includes(channel)
+
+    // Enabling SMS requires recorded text-alert consent: open the opt-in
+    // popup instead of toggling. Accepting it stores phone + consent and
+    // enables the channel server-side in one step.
+    if (!active && channel === 'sms' && user?.sms_opt_in !== true) {
+      setShowSmsOptIn(true)
+      return
+    }
+
+    const updated = active
+      ? channels.filter(c => c !== channel)
+      : [...channels, channel]
+    if (updated.length === 0) {
+      toast.error('At least one notification channel is required')
+      return
+    }
+    saveChannels(updated)
+  }
+
+  const handleOptInComplete = (updatedUser) => {
+    setShowSmsOptIn(false)
+    applyUpdatedUser(updatedUser)
+    // The opt-in endpoint enables the SMS channel server-side. Belt and
+    // braces: if the returned user somehow lacks it (e.g. an older backend
+    // build), enable it explicitly — the consent flag is set by now, so the
+    // profile update is permitted.
+    if (!(updatedUser?.preferred_channels || []).includes('sms')) {
+      saveChannels([...(updatedUser?.preferred_channels || []), 'sms'])
+    }
+  }
+
   return (
     <div className="card p-6">
+      {showSmsOptIn && (
+        <SmsOptInModal
+          user={user}
+          onComplete={handleOptInComplete}
+          onCancel={() => setShowSmsOptIn(false)}
+        />
+      )}
+
       <h2 className="font-display font-semibold text-white mb-1">Notification Preferences</h2>
       <p className="text-slate-500 text-sm mb-5">
         Your preferred channels for receiving emergency alerts
@@ -502,13 +529,17 @@ function PreferencesTab({ user }) {
         {allChannels.map(ch => {
           const active = channels.includes(ch.value)
           return (
-            <div
+            <button
               key={ch.value}
+              type="button"
+              onClick={() => toggleChannel(ch.value)}
+              disabled={saving}
               className={cn(
-                'flex items-center gap-4 p-4 rounded-xl border-2 transition-all',
+                'w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left cursor-pointer',
                 active
-                  ? 'border-primary-500/60 bg-primary-600/10'
-                  : 'border-surface-700 bg-surface-800/40 opacity-60'
+                  ? 'border-primary-500/60 bg-primary-600/10 hover:border-primary-400'
+                  : 'border-surface-700 bg-surface-800/40 opacity-60 hover:opacity-90 hover:border-surface-500',
+                saving && 'cursor-wait'
               )}
             >
               <span className="text-xl">{ch.icon}</span>
@@ -519,13 +550,13 @@ function PreferencesTab({ user }) {
               <span className={active ? 'badge-green' : 'badge-gray'}>
                 {active ? 'Enabled' : 'Disabled'}
               </span>
-            </div>
+            </button>
           )
         })}
       </div>
 
       <p className="text-xs text-slate-500 mt-4">
-        To change your notification preferences, please go to my profile page.
+        Click a channel to enable or disable it. Enabling SMS requires signing up for text alerts.
       </p>
     </div>
   )
